@@ -1,0 +1,37 @@
+# Managed by zashboard public installer. Local edits may be replaced on upgrade.
+[Unit]
+Description=Zashboard Local Helper
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=@ENV_FILE@
+WorkingDirectory=@INSTALL_DIR@/current
+ExecStart="@NODE_BIN@" @INSTALL_DIR@/current/src/server.mjs
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=read-only
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

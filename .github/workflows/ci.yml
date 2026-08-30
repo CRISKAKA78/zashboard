@@ -1,0 +1,52 @@
+name: Verify
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.18.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build upstream-compatible variant
+        run: pnpm build
+
+      - name: Build public no-fonts artifact
+        run: pnpm build:no-fonts
+
+      - name: Lint
+        run: pnpm exec eslint .
+
+      - name: Test public installer and uninstaller
+        run: bash deploy/test-installer.sh
+
+      - name: Confirm checks made no tracked changes
+        run: git diff --check && git diff --exit-code
