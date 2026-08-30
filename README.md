@@ -4,7 +4,7 @@
 部署的增强版本。
 
 ```text
-Project version: v1.0.0
+Project version: v1.1.0
 Based on Zephyruso/zashboard v3.24.0 (f6dd9c07)
 ```
 
@@ -47,6 +47,7 @@ flowchart LR
 - 有效规则穿透：按真实顺序解释最早可确定的规则、目标策略、代理链和最终出站。
 - Text、YAML 及 `domain`/`ipcidr` MRS Provider 的统一解析与缓存。
 - Rule Provider Explorer：类型计数、搜索、稳定排序、原文复制和 Helper 端分页。
+- 设置页同时显示本项目自定义版本与 zashboard 官方最新版；版本检查完全只读，面板不提供在线升级入口，也不会请求内核替换 UI。
 - 裸 Mihomo Pre/Post 自定义规则：固定文件、并发版本检查、`mihomo -t` 校验、原子保存、
   有界备份和失败回滚；源配置始终只读。
 - zashboard 上游原有功能、响应式界面和 PWA 行为。
@@ -194,27 +195,27 @@ sudo bash deploy/install.sh \
 
 前端只有一个构建时变量：
 
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `VITE_LOCAL_HELPER_URL` | 空 | 空值使用面板同源的 `/api/local/*`；跨源部署填写 Helper 基础 URL |
+| 变量                    | 默认值 | 用途                                                            |
+| ----------------------- | ------ | --------------------------------------------------------------- |
+| `VITE_LOCAL_HELPER_URL` | 空     | 空值使用面板同源的 `/api/local/*`；跨源部署填写 Helper 基础 URL |
 
 Helper 的所有运行参数如下。示例文件是
 [`deploy/zashboard-helper.env.example`](./deploy/zashboard-helper.env.example)：
 
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `MIHOMO_CONFIG_PATH` | `/etc/mihomo/config.yaml` | 只读的 Mihomo 源配置 |
-| `MIHOMO_BINARY` | `/usr/bin/mihomo` | 配置校验和 MRS 转换使用的 Mihomo |
-| `MIHOMO_RULES_DIR` | `<配置目录>/rules` | Provider 文件允许读取的根目录 |
-| `MIHOMO_CUSTOM_RULES_DIR` | `<配置目录>/custom` | 固定自定义规则、备份及运行时配置目录 |
-| `LOCAL_HELPER_HOST` | `127.0.0.1` | Helper 监听地址 |
-| `LOCAL_HELPER_PORT` | `8787` | Helper 监听端口 |
-| `LOCAL_HELPER_ALLOWED_ORIGINS` | 空 | 逗号分隔的精确跨源 Origin；同源请求仍允许 |
-| `LOCAL_HELPER_MAX_PROVIDER_BYTES` | `8388608` | 单个 Provider 最大读取字节数 |
-| `LOCAL_HELPER_MRS_TIMEOUT_MS` | `15000` | MRS 转换超时，范围 100–120000 ms |
-| `LOCAL_HELPER_CONFIG_VALIDATION_TIMEOUT_MS` | `20000` | `mihomo -t` 超时，范围 100–120000 ms |
-| `LOCAL_HELPER_CUSTOM_RULES_BACKUPS` | `3` | 自定义规则备份数量，范围 1–20 |
-| `LOCAL_HELPER_MAX_REQUEST_BYTES` | `524288` | 自定义规则请求体上限，范围 1024–4194304 字节 |
+| 变量                                        | 默认值                    | 用途                                         |
+| ------------------------------------------- | ------------------------- | -------------------------------------------- |
+| `MIHOMO_CONFIG_PATH`                        | `/etc/mihomo/config.yaml` | 只读的 Mihomo 源配置                         |
+| `MIHOMO_BINARY`                             | `/usr/bin/mihomo`         | 配置校验和 MRS 转换使用的 Mihomo             |
+| `MIHOMO_RULES_DIR`                          | `<配置目录>/rules`        | Provider 文件允许读取的根目录                |
+| `MIHOMO_CUSTOM_RULES_DIR`                   | `<配置目录>/custom`       | 固定自定义规则、备份及运行时配置目录         |
+| `LOCAL_HELPER_HOST`                         | `127.0.0.1`               | Helper 监听地址                              |
+| `LOCAL_HELPER_PORT`                         | `8787`                    | Helper 监听端口                              |
+| `LOCAL_HELPER_ALLOWED_ORIGINS`              | 空                        | 逗号分隔的精确跨源 Origin；同源请求仍允许    |
+| `LOCAL_HELPER_MAX_PROVIDER_BYTES`           | `8388608`                 | 单个 Provider 最大读取字节数                 |
+| `LOCAL_HELPER_MRS_TIMEOUT_MS`               | `15000`                   | MRS 转换超时，范围 100–120000 ms             |
+| `LOCAL_HELPER_CONFIG_VALIDATION_TIMEOUT_MS` | `20000`                   | `mihomo -t` 超时，范围 100–120000 ms         |
+| `LOCAL_HELPER_CUSTOM_RULES_BACKUPS`         | `3`                       | 自定义规则备份数量，范围 1–20                |
+| `LOCAL_HELPER_MAX_REQUEST_BYTES`            | `524288`                  | 自定义规则请求体上限，范围 1024–4194304 字节 |
 
 首次安装可用同名环境变量覆盖限制值。升级默认保留已有 EnvironmentFile；需要改变路径或参数时，
 传入新参数并显式加 `--reconfigure`。不要在该文件中添加 Controller secret。
@@ -223,12 +224,16 @@ Helper 的所有运行参数如下。示例文件是
 
 ## 升级
 
+自托管 UI 应只配置 `external-ui`，不要设置 `external-ui-url`；后者会让 Mihomo 下载并覆盖已部署的自定义面板。
+
+若需从内核层阻止其他 Controller 客户端触发 UI 替换，请把 `external-ui` 目录加入 Mihomo systemd 服务的 `ReadOnlyPaths`。
+
 本项目不会自动拉取或自动部署。推荐按 GitHub 发布标签升级；先查看发布说明并备份自己的
 Helper EnvironmentFile、自定义规则和 Web Server 配置，然后在普通用户下获取并检出目标版本：
 
 ```bash
 git fetch --tags origin
-git switch --detach v1.0.0
+git switch --detach v1.1.0
 pnpm install --frozen-lockfile
 pnpm build:no-fonts
 sudo bash deploy/install.sh \
@@ -239,7 +244,7 @@ sudo bash deploy/install.sh \
   --custom-rules-dir /etc/mihomo/custom
 ```
 
-将 `v1.0.0` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
+将 `v1.1.0` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
 `git switch main && git pull --ff-only origin main`，但 `main` 可能包含尚未打标签的后续提交。
 
 安装器先准备新的 commit 目录，再切换 `current` 符号链接；原 UI 会进入备份。systemd 启动或健康

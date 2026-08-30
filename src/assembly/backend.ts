@@ -59,8 +59,6 @@ const soft = computed(() => {
     // ---------- mihomo 内核侧 ----------
     coreUpgrade: mihomoOrForkCore,
     coreRestart: mihomoOrForkCore,
-    // 面板自升级 /upgrade/ui。honk 没有任何 /upgrade* 路由。
-    dashboardUpgrade: mihomoOrForkCore,
     reloadConfigs: mihomoOrForkCore,
     updateConfigs: mihomoOrForkCore,
     updateGeoDatabase: mihomoOrForkCore,

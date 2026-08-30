@@ -126,10 +126,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         section: 'settingsSectionApplication',
         searchEntries: [
           {
-            anchorKey: `${SETTINGS_MENU_KEY.general}.zashboardSettings.actions.upgradeDashboard`,
-            label: 'upgradeDashboard',
-          },
-          {
             anchorKey: `${SETTINGS_MENU_KEY.general}.zashboardSettings.actions`,
             label: 'dashboardSettings',
           },
@@ -178,11 +174,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: `${SETTINGS_MENU_KEY.general}.zashboardSettings.language`,
         label: 'language',
-        section: 'settingsSectionApplication',
-      },
-      {
-        key: `${SETTINGS_MENU_KEY.general}.zashboardSettings.autoUpgradeDashboard`,
-        label: 'autoUpgradeDashboard',
         section: 'settingsSectionApplication',
       },
       {

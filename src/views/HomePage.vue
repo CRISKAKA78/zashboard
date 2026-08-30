@@ -77,7 +77,7 @@ import { isBackendAvailable } from '@/assembly/backend'
 import { startBackendSession } from '@/assembly/session'
 import SideBar from '@/components/sidebar/SideBar.vue'
 import { dockTop } from '@/composables/paddingViews'
-import { checkUIUpdate } from '@/assembly/version'
+import { checkDashboardVersion } from '@/assembly/version'
 import { pageTransitionMode, pageTransitionName } from '@/composables/pageTransition'
 import { useSwipeRouter } from '@/composables/swipe'
 import { ROUTE_ICON_MAP } from '@/constant'
@@ -151,5 +151,5 @@ watch(documentVisible, () => {
   fetchProxies()
 })
 
-checkUIUpdate()
+checkDashboardVersion()
 </script>

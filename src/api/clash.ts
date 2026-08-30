@@ -254,11 +254,6 @@ export const restartCoreAPI = () => {
   return axios.post('/restart')
 }
 
-// 面板自升级是 mihomo 标准能力;honk 虽可加载 zashboard,但未提供此端点。
-export const upgradeUIAPI = () => {
-  return axios.post('/upgrade/ui')
-}
-
 // 面板设置同步。/storage/zashboard 是 mihomo 标准扩展。
 export const getStorageAPI = () => {
   return axios.get<Record<string, unknown>>(`/storage/zashboard`)

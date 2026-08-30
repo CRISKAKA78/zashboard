@@ -1,29 +1,46 @@
 <template>
   <div class="relative flex flex-col text-sm">
-    <div class="flex items-center gap-2 px-1">
-      <div class="indicator">
-        <span
-          v-if="isUIUpdateAvailable"
-          class="indicator-item top-1 -right-1 flex"
-        >
-          <span class="bg-secondary absolute h-2 w-2 animate-ping rounded-full"></span>
-          <span class="bg-secondary h-2 w-2 rounded-full"></span>
-        </span>
-        <a
-          href="https://github.com/Zephyruso/zashboard"
-          target="_blank"
-          class="text-lg font-semibold"
-        >
-          zashboard
-          <span class="text-sm font-normal opacity-50">
-            {{ zashboardVersion }}
-            <span
-              v-if="commitId"
-              class="text-xs"
-            >
-              {{ commitId }}
-            </span>
+    <div class="flex flex-col gap-2 px-1">
+      <a
+        :href="OFFICIAL_DASHBOARD_REPOSITORY"
+        target="_blank"
+        class="text-lg font-semibold"
+      >
+        zashboard
+      </a>
+      <div
+        aria-live="polite"
+        class="flex flex-wrap gap-2"
+      >
+        <div class="badge badge-ghost h-auto gap-1.5 py-1">
+          <span class="opacity-60">{{ $t('customDashboardVersion') }}</span>
+          <code>{{ customDashboardVersion }}</code>
+          <span
+            v-if="commitId"
+            class="text-xs opacity-50"
+          >
+            {{ commitId }}
           </span>
+        </div>
+        <a
+          :href="OFFICIAL_DASHBOARD_REPOSITORY + '/releases/latest'"
+          target="_blank"
+          class="badge badge-ghost h-auto gap-1.5 py-1"
+        >
+          <span class="opacity-60">{{ $t('officialDashboardLatestVersion') }}</span>
+          <code v-if="officialDashboardVersionStatus === 'ready'">
+            {{ officialDashboardVersion }}
+          </code>
+          <span
+            v-else-if="officialDashboardVersionStatus === 'loading'"
+            class="loading loading-spinner loading-xs"
+            :aria-label="$t('checkingVersion')"
+          />
+          <span
+            v-else
+            class="opacity-50"
+            >{{ $t('versionUnavailable') }}</span
+          >
         </a>
       </div>
     </div>
@@ -34,7 +51,12 @@
 </template>
 
 <script setup lang="ts">
-import { isUIUpdateAvailable, zashboardVersion } from '@/assembly/version'
+import {
+  customDashboardVersion,
+  officialDashboardVersion,
+  officialDashboardVersionStatus,
+} from '@/assembly/version'
+import { OFFICIAL_DASHBOARD_REPOSITORY } from '@/features/dashboard-version/dashboardVersion'
 import GeneralSettings from './GeneralSettings.vue'
 import StyleSettings from './StyleSettings.vue'
 
