@@ -44,6 +44,8 @@ export type RuleQuery = {
   kind: RuleQueryKind
 }
 
+export type RuleTrafficEvaluation = 'match' | 'miss' | 'indeterminate'
+
 export type ProviderRuleSet = {
   name: string
   behavior: string | null
@@ -81,7 +83,10 @@ export type RulePenetrationStatus =
   'empty' | 'keyword' | 'resolved' | 'fallback' | 'indeterminate' | 'no-match'
 
 export type RulePenetrationBlocker = {
-  providerName: string
+  source: 'direct' | 'provider'
+  providerName: string | null
+  ruleType: string
+  ruleValue: string
   ruleIndex: number
   rulePosition: number
   target: string

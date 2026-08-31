@@ -6,16 +6,47 @@ export const CUSTOM_RULE_TYPES = Object.freeze([
   'DOMAIN',
   'DOMAIN-SUFFIX',
   'DOMAIN-KEYWORD',
+  'DOMAIN-REGEX',
+  'DOMAIN-WILDCARD',
+  'GEOSITE',
+  'GEOIP',
+  'SRC-GEOIP',
+  'IP-ASN',
+  'SRC-IP-ASN',
   'IP-CIDR',
   'IP-CIDR6',
+  'SRC-IP-CIDR',
+  'SRC-IP-CIDR6',
+  'IP-SUFFIX',
+  'SRC-IP-SUFFIX',
+  'SRC-PORT',
+  'DST-PORT',
+  'IN-PORT',
+  'DSCP',
+  'IN-USER',
+  'IN-NAME',
+  'IN-TYPE',
+  'PROCESS-NAME',
+  'PROCESS-PATH',
+  'PROCESS-NAME-REGEX',
+  'PROCESS-PATH-REGEX',
+  'PROCESS-NAME-WILDCARD',
+  'PROCESS-PATH-WILDCARD',
+  'REMATCH-NAME',
   'RULE-SET',
-  'GEOIP',
+  'NETWORK',
+  'UID',
+  'SUB-RULE',
+  'AND',
+  'OR',
+  'NOT',
   'MATCH',
 ])
 
 const CUSTOM_RULE_TYPE_SET = new Set(CUSTOM_RULE_TYPES)
 const FALLBACK_TYPES = new Set(['MATCH', 'FINAL'])
 const MAX_RULES_PER_SECTION = 1000
+const MAX_FAKE_IP_FILTERS = 10_000
 const MAX_FIELD_LENGTH = 2048
 const ID_PATTERN = /^[\w-]{1,100}$/u
 const PARAM_PATTERN = /^[\w=:+./-]{1,100}$/u
@@ -31,14 +62,64 @@ const normalizeType = (value) => {
     DOMAIN: 'DOMAIN',
     DOMAINSUFFIX: 'DOMAIN-SUFFIX',
     DOMAINKEYWORD: 'DOMAIN-KEYWORD',
+    DOMAINREGEX: 'DOMAIN-REGEX',
+    DOMAINWILDCARD: 'DOMAIN-WILDCARD',
+    GEOSITE: 'GEOSITE',
+    GEOIP: 'GEOIP',
+    SRCGEOIP: 'SRC-GEOIP',
+    IPASN: 'IP-ASN',
+    SRCIPASN: 'SRC-IP-ASN',
     IPCIDR: 'IP-CIDR',
     IPCIDR6: 'IP-CIDR6',
+    SRCIPCIDR: 'SRC-IP-CIDR',
+    SRCIPCIDR6: 'SRC-IP-CIDR6',
+    IPSUFFIX: 'IP-SUFFIX',
+    SRCIPSUFFIX: 'SRC-IP-SUFFIX',
+    SRCPORT: 'SRC-PORT',
+    DSTPORT: 'DST-PORT',
+    INPORT: 'IN-PORT',
+    DSCP: 'DSCP',
+    INUSER: 'IN-USER',
+    INNAME: 'IN-NAME',
+    INTYPE: 'IN-TYPE',
+    PROCESSNAME: 'PROCESS-NAME',
+    PROCESSPATH: 'PROCESS-PATH',
+    PROCESSNAMEREGEX: 'PROCESS-NAME-REGEX',
+    PROCESSPATHREGEX: 'PROCESS-PATH-REGEX',
+    PROCESSNAMEWILDCARD: 'PROCESS-NAME-WILDCARD',
+    PROCESSPATHWILDCARD: 'PROCESS-PATH-WILDCARD',
+    REMATCHNAME: 'REMATCH-NAME',
     RULESET: 'RULE-SET',
-    GEOIP: 'GEOIP',
+    NETWORK: 'NETWORK',
+    UID: 'UID',
+    SUBRULE: 'SUB-RULE',
+    SUBRULES: 'SUB-RULE',
+    AND: 'AND',
+    OR: 'OR',
+    NOT: 'NOT',
     MATCH: 'MATCH',
     FINAL: 'FINAL',
   }
   return aliases[compact] || compact
+}
+
+const splitTopLevelFields = (source) => {
+  const fields = []
+  let field = ''
+  let depth = 0
+
+  for (const character of source) {
+    if (character === '(') depth += 1
+    if (character === ')' && depth > 0) depth -= 1
+    if (character === ',' && depth === 0) {
+      fields.push(field.trim())
+      field = ''
+    } else {
+      field += character
+    }
+  }
+  fields.push(field.trim())
+  return fields
 }
 
 const cleanField = (value, label, { required = true } = {}) => {
@@ -61,7 +142,7 @@ const cleanField = (value, label, { required = true } = {}) => {
 
 const parseRawRule = (raw) => {
   const cleaned = cleanField(raw, 'Raw rule')
-  const fields = cleaned.split(',').map((field) => field.trim())
+  const fields = splitTopLevelFields(cleaned)
   const type = normalizeType(fields[0])
 
   if (!CUSTOM_RULE_TYPE_SET.has(type)) {
@@ -143,7 +224,7 @@ const normalizeRule = (input, section, index) => {
     ['Rule value', value],
     ['Rule target', target],
   ]) {
-    if (field.includes(',')) {
+    if (field.includes(',') && !(label === 'Rule value' && ['AND', 'OR', 'NOT'].includes(type))) {
       throw new LocalHelperError('CUSTOM_RULE_INVALID', `${label} cannot contain a comma.`, 422)
     }
   }
@@ -166,6 +247,40 @@ const normalizeSection = (value, section) => {
   return value.map((rule, index) => normalizeRule(rule, section, index))
 }
 
+const getBaseFakeIpFilter = (baseConfig) => {
+  if (!isRecord(baseConfig.dns) || baseConfig.dns['fake-ip-filter'] === undefined) return []
+  if (!Array.isArray(baseConfig.dns['fake-ip-filter'])) {
+    throw new LocalHelperError(
+      'CONFIG_FAKE_IP_FILTER_INVALID',
+      'Source configuration dns.fake-ip-filter must be a sequence of strings.',
+      422,
+    )
+  }
+  return baseConfig.dns['fake-ip-filter']
+}
+
+export const normalizeFakeIpFilter = (value, baseConfig = {}) => {
+  const filters = value === undefined ? getBaseFakeIpFilter(baseConfig) : value
+  if (!Array.isArray(filters)) {
+    throw new LocalHelperError(
+      'FAKE_IP_FILTER_INVALID',
+      'Fake-IP filter must be an array of strings.',
+      422,
+    )
+  }
+  if (filters.length > MAX_FAKE_IP_FILTERS) {
+    throw new LocalHelperError(
+      'FAKE_IP_FILTER_LIMIT_EXCEEDED',
+      `Fake-IP filter cannot exceed ${MAX_FAKE_IP_FILTERS} entries.`,
+      422,
+    )
+  }
+
+  return [
+    ...new Set(filters.map((filter, index) => cleanField(filter, `Fake-IP filter[${index}]`))),
+  ]
+}
+
 export const normalizeCustomRules = (input, baseConfig = {}) => {
   if (!isRecord(input)) {
     throw new LocalHelperError(
@@ -177,6 +292,7 @@ export const normalizeCustomRules = (input, baseConfig = {}) => {
 
   const pre = normalizeSection(input.pre ?? [], 'Pre')
   const post = normalizeSection(input.post ?? [], 'Post')
+  const fakeIpFilter = normalizeFakeIpFilter(input.fakeIpFilter, baseConfig)
   const ids = new Set()
   for (const rule of [...pre, ...post]) {
     if (ids.has(rule.id)) {
@@ -218,7 +334,7 @@ export const normalizeCustomRules = (input, baseConfig = {}) => {
     )
   }
 
-  return { pre, post }
+  return { pre, post, fakeIpFilter }
 }
 
 const requireOriginalRules = (baseConfig) => {
@@ -251,8 +367,17 @@ export const buildManagedConfig = (baseConfig, customRules) => {
   const nonFallback = firstFallback < 0 ? originalRules : originalRules.slice(0, firstFallback)
   const fallback = firstFallback < 0 ? [] : originalRules.slice(firstFallback)
 
+  const shouldManageDns = isRecord(baseConfig.dns) || customRules.fakeIpFilter.length > 0
+  const dns = shouldManageDns
+    ? {
+        ...(isRecord(baseConfig.dns) ? baseConfig.dns : {}),
+        'fake-ip-filter': customRules.fakeIpFilter,
+      }
+    : baseConfig.dns
+
   return {
     ...baseConfig,
+    ...(dns === undefined ? {} : { dns }),
     rules: [
       ...customRules.pre.map((rule) => rule.raw),
       ...nonFallback,
@@ -279,6 +404,9 @@ export const serializeCustomRuleFile = (rules) =>
     { lineWidth: 0 },
   )
 
+export const serializeFakeIpFilterFile = (filters) =>
+  stringify({ version: 1, 'fake-ip-filter': filters }, { lineWidth: 0 })
+
 export const parseCustomRuleFile = (source, label) => {
   if (!source) return []
   const document = parseDocument(source, { prettyErrors: true, uniqueKeys: true })
@@ -298,6 +426,27 @@ export const parseCustomRuleFile = (source, label) => {
     )
   }
   return value.rules
+}
+
+export const parseFakeIpFilterFile = (source) => {
+  if (!source) return undefined
+  const document = parseDocument(source, { prettyErrors: true, uniqueKeys: true })
+  if (document.errors.length) {
+    throw new LocalHelperError(
+      'FAKE_IP_FILTER_YAML_INVALID',
+      `Fake-IP filter YAML is invalid: ${document.errors[0].message}`,
+      422,
+    )
+  }
+  const value = document.toJS({ maxAliasCount: 20 })
+  if (!isRecord(value) || value.version !== 1 || !Array.isArray(value['fake-ip-filter'])) {
+    throw new LocalHelperError(
+      'FAKE_IP_FILTER_YAML_INVALID',
+      'Fake-IP filter file must contain version: 1 and a fake-ip-filter sequence.',
+      422,
+    )
+  }
+  return value['fake-ip-filter']
 }
 
 export const serializeManagedConfig = (config) => stringify(config, { lineWidth: 0 })

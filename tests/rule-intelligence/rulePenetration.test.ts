@@ -85,6 +85,34 @@ describe('resolveRulePenetration', () => {
     assert.deepEqual(result.route?.path, ['AI', 'US-03'])
   })
 
+  it('resolves a Controller RuleSet through DOMAIN-WILDCARD', () => {
+    const result = resolveRulePenetration(
+      'ag.hga030.com',
+      [rule({ type: 'RuleSet', payload: 'Custom Proxy', proxy: '自定义代理' })],
+      [provider('Custom Proxy', [entry('DOMAIN-WILDCARD', 'ag.hga*.com')])],
+    )
+
+    assert.equal(result.status, 'resolved')
+    assert.equal(result.effectiveMatch?.entry?.type, 'DOMAIN-WILDCARD')
+    assert.equal(result.target, '自定义代理')
+  })
+
+  it('resolves DOMAIN-REGEX and IP-SUFFIX provider rules', () => {
+    const domain = resolveRulePenetration(
+      'api.example.com',
+      [rule({ type: 'RULE-SET', payload: 'Regex', proxy: 'Proxy' })],
+      [provider('Regex', [entry('DOMAIN-REGEX', '^api\\.example\\.com$')])],
+    )
+    const ip = resolveRulePenetration(
+      '1.8.8.8',
+      [rule({ type: 'RULE-SET', payload: 'Suffix', proxy: 'Proxy' })],
+      [provider('Suffix', [entry('IP-SUFFIX', '8.8.8.8/24')])],
+    )
+
+    assert.equal(domain.status, 'resolved')
+    assert.equal(ip.status, 'resolved')
+  })
+
   it('resolves RuleSet → Group → Group → Node', () => {
     const result = resolveRulePenetration(
       'chatgpt.com',
@@ -201,6 +229,44 @@ describe('resolveRulePenetration', () => {
 
     assert.equal(result.status, 'indeterminate')
     assert.equal(result.blocker?.code, 'HELPER_OFFLINE')
+  })
+
+  it('does not guess past a direct rule that requires unavailable context', () => {
+    const result = resolveRulePenetration('example.com', [
+      rule({ type: 'GEOSITE', payload: 'google', proxy: 'Proxy' }),
+      rule({ type: 'DOMAIN', payload: 'example.com', proxy: 'DIRECT' }),
+    ])
+
+    assert.equal(result.status, 'indeterminate')
+    assert.equal(result.blocker?.source, 'direct')
+    assert.equal(result.blocker?.ruleType, 'GEOSITE')
+    assert.equal(result.blocker?.code, 'RULE_CONTEXT_REQUIRED')
+  })
+
+  it('does not guess past an indeterminate entry in an otherwise available Provider', () => {
+    const result = resolveRulePenetration(
+      'example.com',
+      [
+        rule({ type: 'RULE-SET', payload: 'Geo', proxy: 'Proxy' }),
+        rule({ type: 'DOMAIN', payload: 'example.com', proxy: 'DIRECT' }),
+      ],
+      [provider('Geo', [entry('GEOSITE', 'google')])],
+    )
+
+    assert.equal(result.status, 'indeterminate')
+    assert.equal(result.blocker?.source, 'provider')
+    assert.equal(result.blocker?.ruleType, 'GEOSITE')
+  })
+
+  it('still resolves a known Provider match when another entry is indeterminate', () => {
+    const result = resolveRulePenetration(
+      'example.com',
+      [rule({ type: 'RULE-SET', payload: 'Mixed', proxy: 'Proxy' })],
+      [provider('Mixed', [entry('GEOSITE', 'google'), entry('DOMAIN', 'example.com')])],
+    )
+
+    assert.equal(result.status, 'resolved')
+    assert.equal(result.effectiveMatch?.entry?.type, 'DOMAIN')
   })
 
   it('does not label keyword content search as an effective match', () => {

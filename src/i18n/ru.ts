@@ -251,6 +251,11 @@ const ru: LANG_MESSAGE = {
   proxyGroupIconSize: 'Размер иконки группы прокси',
   proxyGroupIconMargin: 'Отступ иконки группы прокси',
   allowLan: 'Разрешить локальную сеть',
+  fakeIPFilter: 'Домены-исключения Fake-IP',
+  editFakeIPFilter: 'Изменить исключения Fake-IP',
+  fakeIPFilterDescription:
+    'Укажите по одному домену в строке. Эти домены не будут преобразованы в Fake-IP.',
+  fakeIPFilterPlaceholder: 'Например:\n+.example.com\nlocalhost',
   proxyChainDirection: 'Направление цепочки прокси',
   showFullProxyChain: 'Показать полную цепочку прокси',
   reverse: 'Обратное',
@@ -469,6 +474,8 @@ const ru: LANG_MESSAGE = {
   ruleSearchResults: 'Результаты поиска',
   rulePenetrationIndeterminate:
     'Эффективное совпадение нельзя определить: Provider {provider} в правиле #{index} недоступен.',
+  rulePenetrationContextIndeterminate:
+    'Для правила #{index} ({type}) нужен контекст трафика, которого нет в запросе только по адресу.',
   actualRuleMatch: 'Эффективное совпадение',
   ruleSource: 'Источник правила',
   directRuleSource: 'Прямое правило',

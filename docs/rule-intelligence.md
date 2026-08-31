@@ -12,7 +12,7 @@ Rule Intelligence 在不引入数据库、SSH 或第二套 Mihomo Controller 代
 - Text、YAML 和部分 MRS Rule Provider 查询；
 - Rule Provider 内容浏览、分类、搜索、排序与分页；
 - 实际规则命中、策略链和最终出口解析；
-- 裸 Mihomo 的 Pre / Post 自定义规则管理。
+- 裸 Mihomo 的 Pre / Post 自定义规则与 Fake-IP Filter 管理。
 
 ## 总体架构
 
@@ -21,6 +21,7 @@ Mihomo Controller API                  Local Helper (loopback)
   /rules, /proxies, /configs             source config + provider files
           |                                custom/pre-rules.yaml
           |                                custom/post-rules.yaml
+          |                                custom/fake-ip-filter.yaml
           v                                custom/runtime-config.yaml
 zashboard assembly/store  <---------->  scoped /api/local/*
           |
@@ -37,7 +38,7 @@ Fallback -> Search -> Penetration -> Custom Rules UI
 3. Rule Search 将直接规则和 Provider 条目归一化后查询，最多展示 200 条。
 4. Rule Provider Explorer 复用同一份归一化结果和元数据缓存，在 Helper 侧分类、搜索、排序并按 100 条分页返回；浏览器不会一次渲染整个大 Provider。
 5. Rule Penetration 按 Mihomo 的自上而下规则顺序找第一个可生效匹配，再通过唯一的 Proxy Chain 解析器跟踪到最终出口。
-6. 自定义规则保存成功后，前端调用现有 `PUT /configs?force=true` 客户端加载托管配置，然后刷新 `/rules`、`/proxies` 与 Provider 缓存。
+6. 自定义规则或 Fake-IP Filter 保存成功后，前端调用现有 `PUT /configs?force=true` 客户端加载托管配置，然后刷新 `/rules`、`/proxies` 与 Provider 缓存；失败时通过同一 Helper 备份链路回滚。
 
 ## Local Helper
 
@@ -58,7 +59,7 @@ POST /api/local/custom-rules/rollback
 POST /api/local/custom-rules/restore
 ```
 
-写入 API 只接受结构化规则和 Helper 生成的版本/备份 ID，不接受文件路径。
+写入 API 只接受结构化规则、Fake-IP Filter 字符串数组和 Helper 生成的版本/备份 ID，不接受文件路径。
 
 `GET /api/local/rule-provider/:name/rules` 不带查询参数时继续返回完整归一化条目，供 Rule Search/Rule Penetration 使用。Explorer 使用以下有界查询：
 
@@ -102,15 +103,15 @@ POST /api/local/custom-rules/restore
 
 ## Rule Provider Explorer
 
-Rules 页的 Provider 卡片和表格行共用一个 `RuleProviderExplorerDialog`。更新按钮会阻止事件冒泡，因此仍只执行原有 Provider 更新动作。弹窗提供全部、域名、IP、其他四个分类及全局计数；域名族包含 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`，IP 族包含 `IP-CIDR`、`IP-CIDR6`、`SRC-IP`、`SRC-IP-CIDR`、`SRC-IP-CIDR6`、`GEOIP`。
+Rules 页的 Provider 卡片和表格行共用一个 `RuleProviderExplorerDialog`。更新按钮会阻止事件冒泡，因此仍只执行原有 Provider 更新动作。弹窗提供全部、域名、IP、其他四个分类及全局计数；域名族还覆盖 `DOMAIN-REGEX`、`DOMAIN-WILDCARD`、`GEOSITE`，IP 族覆盖 CIDR、IP-SUFFIX、GEOIP、IP-ASN 及对应的来源地址类型。
 
 表格显示 Type、Content、Params 和 Raw。表头按升序、降序、原始顺序循环，搜索仅匹配 Provider 内部内容，不声称代表流量命中。每条规则只有一个 Raw 复制入口。桌面端使用宽弹窗，移动端占满可视窗口；Helper 离线、Provider 文件缺失或格式不支持时只在弹窗内降级，不影响 Rules 页已有功能。
 
 ## Rule Search 与 Rule Penetration
 
-Rule Search 对 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR` 和 `IP-CIDR6` 做流量语义匹配；关键词模式仅是内容搜索，不声称是实际流量命中。
+Rule Search 对 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`DOMAIN-WILDCARD`、`DOMAIN-REGEX`、`IP-CIDR`、`IP-CIDR6` 和 `IP-SUFFIX` 做流量语义匹配，并统一 Controller CamelCase 与配置/Provider 大写连字符类型名；关键词模式仅是内容搜索，不声称是实际流量命中。
 
-Rule Penetration 严格遵守顺序。如果更早的 `RULE-SET` 不可用，结果是“无法确定”，而不会把后方的已知规则误报为有效命中。策略链解析共用 `proxyChain.ts`，支持缺失节点和循环检测。
+Rule Penetration 严格遵守顺序。如果更早的 `RULE-SET` 不可用，或遇到仅凭目标域名/IP 无法判断的 `GEOSITE`、`GEOIP`、`IP-ASN`、来源、端口、进程、入站或逻辑规则，结果是“无法确定”，不会把后方规则误报为有效命中。Provider 中只要存在可证明的匹配仍可确定命中；仅在没有已知匹配且存在不可判定条目时阻断。策略链解析共用 `proxyChain.ts`，支持缺失节点和循环检测。
 
 ## Custom Rules
 
@@ -120,6 +121,7 @@ Rule Penetration 严格遵守顺序。如果更早的 `RULE-SET` 不可用，结
 config.yaml                 # 订阅/人工维护的只读源
 custom/pre-rules.yaml       # 可人工查看的面板数据
 custom/post-rules.yaml
+custom/fake-ip-filter.yaml  # 与规则共用版本、校验、备份和回滚
 custom/runtime-config.yaml  # 生成物，供 Mihomo 加载
 custom/backups/*            # 有界备份
 ```
@@ -130,21 +132,23 @@ custom/backups/*            # 有界备份
 Pre -> Original non-fallback -> Post -> Original MATCH/FINAL tail
 ```
 
-支持 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`IP-CIDR`、`IP-CIDR6`、`RULE-SET`、`GEOIP`、`MATCH`。Pre 不允许 `MATCH`；Post 的 `MATCH` 必须是最后一条，且当源配置已有 `MATCH/FINAL` 时禁用，避免使原兜底失效。Target 候选来自 `/proxies`，同时保留手动输入和 raw 高级模式。
+编辑器覆盖 Mihomo v1.19.30 定义的域名、地理数据、目标/来源 IP、ASN、端口、进程、入站、网络、UID、Rule Set、子规则与逻辑规则类型；复杂逻辑规则可使用 raw 高级模式，最终仍以本机 `mihomo -t` 为准。Pre 不允许 `MATCH`；Post 的 `MATCH` 必须是最后一条，且当源配置已有 `MATCH/FINAL` 时禁用，避免使原兜底失效。Target 候选来自 `/proxies`，同时保留手动输入。
 
-保存流程：写同目录临时文件（`0600`）、`fsync`、生成临时运行配置、执行 `mihomo -t -d <source-dir> -f <temp>`、产生有界备份、原子 `rename`、通过现有 API reload。写入期间有进程内锁，版本哈希同时覆盖源配置和三个托管文件，可检出另一页面或外部进程的更改。
+Fake-IP Filter 不再直接 PATCH Controller 的临时 `/configs` 状态。设置页读取和保存同一份 Helper 托管状态；Helper 从只读源配置继承初值，并只在生成的 runtime 中覆盖 `dns.fake-ip-filter`。保存 Filter 时会携带当前 Pre/Post，保存规则时也会保留当前 Filter，以同一个版本令牌防止页面间静默覆盖。
+
+保存流程：写同目录临时文件（`0600`）、`fsync`、生成临时运行配置、执行 `mihomo -t -d <source-dir> -f <temp>`、产生有界备份、原子 `rename`、通过现有 API reload。写入期间有进程内锁，版本哈希同时覆盖源配置、Pre、Post、Fake-IP Filter 和 runtime，可检出另一页面或外部进程的更改。
 
 reload 失败时，前端请求 Helper 恢复旧文件，再次 reload 旧运行配置，用于覆盖“Mihomo 已应用但 HTTP 响应丢失”的模糊失败情形。
 
 ## 安全模型
 
 - 默认仅 loopback，检查 Origin，CORS 需显式放行。
-- Provider 仅可读配置名称，自定义规则仅可写固定文件，没有通用读写路由。
+- Provider 仅可读配置名称，自定义规则与 Fake-IP Filter 仅可写固定文件，没有通用读写路由。
 - Explorer 查询只接受 Provider 名称和有界筛选参数，客户端不能提交路径、URL 或任意文件名。
 - 请求体、Provider 文件、规则数量、字段长度、YAML alias、CLI 时间和输出都有上限。
 - 拒绝托管文件和存储目录的符号链接，CLI 使用 `execFile` 参数数组。
 - 源 `config.yaml` 永不写入；运行配置是可重建生成物。
-- 备份仅包含 Pre/Post，数量有界，恢复也必须重走 YAML 解析和 Mihomo 校验。
+- 备份包含 Pre/Post/Fake-IP Filter，数量有界，恢复也必须重走 YAML 解析和 Mihomo 校验；旧版只含 Pre/Post 的备份恢复时保留当前 Filter。
 
 ## 部署
 
@@ -164,7 +168,7 @@ loopback，且不会编辑或重启 Mihomo。以下步骤描述通用功能运�
 - MRS 只支持 `domain` / `ipcidr`，且需要本机 Mihomo 的转换能力。
 - Explorer 搜索和排序在 Helper 内存中的已解析条目上执行；响应最多 500 条，界面固定请求 100 条，但 Helper 仍受单 Provider 文件大小上限约束。
 - Helper 的写锁是单进程的；版本哈希依然可防止多进程静默覆盖，但不提供分布式事务。
-- 三个文件不可能在所有文件系统上组成单个多文件原子事务；中途 rename 失败会立即从内存中的旧源回写全部文件。
+- 四个托管文件不可能在所有文件系统上组成单个多文件原子事务；中途 rename 失败会立即从内存中的旧源回写全部文件。
 - Helper 没有独立账号系统；安全边界是 loopback/同源代理、Origin 检查和进程文件权限。
 
 ## 官方语义依据

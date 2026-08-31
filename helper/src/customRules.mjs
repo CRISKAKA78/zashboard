@@ -9,7 +9,9 @@ import {
   buildManagedConfig,
   normalizeCustomRules,
   parseCustomRuleFile,
+  parseFakeIpFilterFile,
   serializeCustomRuleFile,
+  serializeFakeIpFilterFile,
   serializeManagedConfig,
 } from './customRuleModel.mjs'
 import { LocalHelperError } from './errors.mjs'
@@ -26,6 +28,7 @@ const pathsFor = (settings) => {
     customRulesDir,
     prePath: join(customRulesDir, 'pre-rules.yaml'),
     postPath: join(customRulesDir, 'post-rules.yaml'),
+    fakeIpFilterPath: join(customRulesDir, 'fake-ip-filter.yaml'),
     runtimePath: resolve(settings.runtimeConfigPath || join(customRulesDir, 'runtime-config.yaml')),
     backupsDir: join(customRulesDir, 'backups'),
   }
@@ -91,13 +94,15 @@ const readOptionalFile = async (path) => {
   }
 }
 
-const versionFor = ({ baseSource, preSource, postSource, runtimeSource }) =>
+const versionFor = ({ baseSource, preSource, postSource, fakeIpFilterSource, runtimeSource }) =>
   createHash('sha256')
     .update(baseSource)
     .update('\0PRE\0')
     .update(preSource ?? '<missing>')
     .update('\0POST\0')
     .update(postSource ?? '<missing>')
+    .update('\0FAKE-IP-FILTER\0')
+    .update(fakeIpFilterSource ?? '<missing>')
     .update('\0RUNTIME\0')
     .update(runtimeSource ?? '<missing>')
     .digest('hex')
@@ -105,17 +110,20 @@ const versionFor = ({ baseSource, preSource, postSource, runtimeSource }) =>
 const loadState = async (settings) => {
   const paths = pathsFor(settings)
   await ensureStorageDirectory(paths.customRulesDir)
-  const [baseConfig, baseSource, preSource, postSource, runtimeSource] = await Promise.all([
-    readMihomoConfig(settings.configPath),
-    readFile(settings.configPath, 'utf8'),
-    readOptionalFile(paths.prePath),
-    readOptionalFile(paths.postPath),
-    readOptionalFile(paths.runtimePath),
-  ])
+  const [baseConfig, baseSource, preSource, postSource, fakeIpFilterSource, runtimeSource] =
+    await Promise.all([
+      readMihomoConfig(settings.configPath),
+      readFile(settings.configPath, 'utf8'),
+      readOptionalFile(paths.prePath),
+      readOptionalFile(paths.postPath),
+      readOptionalFile(paths.fakeIpFilterPath),
+      readOptionalFile(paths.runtimePath),
+    ])
   const customRules = normalizeCustomRules(
     {
       pre: parseCustomRuleFile(preSource, 'Pre'),
       post: parseCustomRuleFile(postSource, 'Post'),
+      fakeIpFilter: parseFakeIpFilterFile(fakeIpFilterSource),
     },
     baseConfig,
   )
@@ -126,9 +134,16 @@ const loadState = async (settings) => {
     baseSource,
     preSource,
     postSource,
+    fakeIpFilterSource,
     runtimeSource,
     customRules,
-    version: versionFor({ baseSource, preSource, postSource, runtimeSource }),
+    version: versionFor({
+      baseSource,
+      preSource,
+      postSource,
+      fakeIpFilterSource,
+      runtimeSource,
+    }),
   }
 }
 
@@ -241,16 +256,24 @@ export const validateMihomoConfig = async (settings, configPath, execute = execF
 }
 
 const prepareCandidate = async (settings, state, input, dependencies = {}) => {
-  const customRules = normalizeCustomRules(input, state.baseConfig)
+  const customRules = normalizeCustomRules(
+    {
+      ...input,
+      fakeIpFilter: input?.fakeIpFilter ?? state.customRules.fakeIpFilter,
+    },
+    state.baseConfig,
+  )
   const managedConfig = buildManagedConfig(state.baseConfig, customRules)
   const sources = {
     pre: serializeCustomRuleFile(customRules.pre),
     post: serializeCustomRuleFile(customRules.post),
+    fakeIpFilter: serializeFakeIpFilterFile(customRules.fakeIpFilter),
     runtime: serializeManagedConfig(managedConfig),
   }
   const temporary = {
     pre: temporaryPath(state.paths.customRulesDir, 'pre-rules'),
     post: temporaryPath(state.paths.customRulesDir, 'post-rules'),
+    fakeIpFilter: temporaryPath(state.paths.customRulesDir, 'fake-ip-filter'),
     runtime: temporaryPath(state.paths.customRulesDir, 'runtime-config'),
   }
 
@@ -258,6 +281,7 @@ const prepareCandidate = async (settings, state, input, dependencies = {}) => {
     const writer = dependencies.writeTemporary ?? writeTemporary
     await writer(temporary.pre, sources.pre)
     await writer(temporary.post, sources.post)
+    await writer(temporary.fakeIpFilter, sources.fakeIpFilter)
     await writer(temporary.runtime, sources.runtime)
     await (dependencies.validateConfig ?? validateMihomoConfig)(settings, temporary.runtime)
     return { customRules, managedConfig, sources, temporary }
@@ -282,8 +306,11 @@ const createBackup = async (settings, state) => {
   await mkdir(directory, { recursive: true, mode: 0o700 })
   const pre = state.preSource ?? serializeCustomRuleFile([])
   const post = state.postSource ?? serializeCustomRuleFile([])
+  const fakeIpFilter =
+    state.fakeIpFilterSource ?? serializeFakeIpFilterFile(state.customRules.fakeIpFilter)
   await writeTemporary(join(directory, 'pre-rules.yaml'), pre)
   await writeTemporary(join(directory, 'post-rules.yaml'), post)
+  await writeTemporary(join(directory, 'fake-ip-filter.yaml'), fakeIpFilter)
   await writeTemporary(
     join(directory, 'manifest.json'),
     `${JSON.stringify({ id, createdAt: new Date().toISOString() }, null, 2)}\n`,
@@ -335,20 +362,23 @@ const pruneBackups = async (settings, paths) => {
   )
 }
 
-const readBackupRules = async (paths, id) => {
+const readBackupRules = async (paths, id, fallbackFakeIpFilter) => {
   if (typeof id !== 'string' || !/^\d+-[a-f\d]{16}$/u.test(id)) {
     throw new LocalHelperError('CUSTOM_RULES_BACKUP_INVALID', 'Backup id is invalid.', 400)
   }
   const directory = join(paths.backupsDir, id)
   try {
-    const [preSource, postSource] = await Promise.all([
+    const [preSource, postSource, fakeIpFilterSource] = await Promise.all([
       readOptionalFile(join(directory, 'pre-rules.yaml')),
       readOptionalFile(join(directory, 'post-rules.yaml')),
+      readOptionalFile(join(directory, 'fake-ip-filter.yaml')),
     ])
     if (preSource === null || postSource === null) throw new Error('incomplete')
     return {
       pre: parseCustomRuleFile(preSource, 'Pre backup'),
       post: parseCustomRuleFile(postSource, 'Post backup'),
+      fakeIpFilter:
+        parseFakeIpFilterFile(fakeIpFilterSource) ?? structuredClone(fallbackFakeIpFilter),
     }
   } catch (error) {
     if (error instanceof LocalHelperError) throw error
@@ -393,12 +423,14 @@ const commitCandidate = async (state, candidate, dependencies = {}) => {
   try {
     await replace(candidate.temporary.pre, state.paths.prePath)
     await replace(candidate.temporary.post, state.paths.postPath)
+    await replace(candidate.temporary.fakeIpFilter, state.paths.fakeIpFilterPath)
     await replace(candidate.temporary.runtime, state.paths.runtimePath)
   } catch (error) {
     try {
       await Promise.all([
         writeSourceAtomic(state.paths.prePath, state.preSource),
         writeSourceAtomic(state.paths.postPath, state.postSource),
+        writeSourceAtomic(state.paths.fakeIpFilterPath, state.fakeIpFilterSource),
         writeSourceAtomic(state.paths.runtimePath, state.runtimeSource),
       ])
     } catch (rollbackError) {
@@ -417,6 +449,7 @@ const publicState = async (settings, state, extra = {}) => ({
   version: state.version,
   pre: state.customRules.pre,
   post: state.customRules.post,
+  fakeIpFilter: state.customRules.fakeIpFilter,
   sourceConfigPath: settings.configPath,
   runtimeConfigPath: state.paths.runtimePath,
   backups: await listBackups(state.paths),
@@ -433,6 +466,7 @@ export const validateCustomRules = async (settings, input, dependencies = {}) =>
     valid: true,
     preCount: candidate.customRules.pre.length,
     postCount: candidate.customRules.post.length,
+    fakeIpFilterCount: candidate.customRules.fakeIpFilter.length,
     runtimeConfigPath: state.paths.runtimePath,
   }
 }
@@ -464,7 +498,7 @@ const restore = async (settings, input, dependencies, createCurrentBackup) => {
   return withWriteLock(key, async () => {
     const state = await loadState(settings)
     requireExpectedVersion(input, state.version)
-    const rules = await readBackupRules(state.paths, input.backupId)
+    const rules = await readBackupRules(state.paths, input.backupId, state.customRules.fakeIpFilter)
     let candidate
     try {
       candidate = await prepareCandidate(settings, state, rules, dependencies)

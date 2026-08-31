@@ -248,6 +248,10 @@ const en = {
   proxyGroupIconSize: 'Proxy group icon size',
   proxyGroupIconMargin: 'Proxy group icon margin',
   allowLan: 'Allow LAN',
+  fakeIPFilter: 'Fake-IP filter',
+  editFakeIPFilter: 'Edit Fake-IP filter',
+  fakeIPFilterDescription: 'Enter one domain per line. These domains will not resolve to Fake-IP.',
+  fakeIPFilterPlaceholder: 'For example:\n+.example.com\nlocalhost',
   proxyChainDirection: 'Proxy chain direction',
   showFullProxyChain: 'Show full proxy chain',
   reverse: 'Reverse',
@@ -466,6 +470,8 @@ const en = {
   ruleSearchResults: 'Search results',
   rulePenetrationIndeterminate:
     'The effective match cannot be determined because Provider {provider} at rule #{index} is unavailable.',
+  rulePenetrationContextIndeterminate:
+    'Rule #{index} ({type}) needs traffic context that this host-only query cannot determine.',
   actualRuleMatch: 'Effective match',
   ruleSource: 'Rule source',
   directRuleSource: 'Direct rule',

@@ -333,6 +333,8 @@ import { fetchProxies, proxyMap } from '@/assembly/proxies'
 import { fetchRules } from '@/assembly/rules'
 import {
   applyCustomRulesUpdate,
+  cloneCustomRule,
+  cloneCustomRulesDraft,
   createCustomRule,
   CUSTOM_RULE_TYPES,
   type CustomRule,
@@ -366,7 +368,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Draggable from 'vuedraggable'
 
-type SectionKey = keyof CustomRulesDraft
+type SectionKey = 'pre' | 'post'
 type EditingLocation = { section: SectionKey; index: number | null }
 
 const { t } = useI18n()
@@ -375,7 +377,7 @@ const loading = ref(false)
 const busy = ref(false)
 const dirty = ref(false)
 const state = ref<CustomRulesState | null>(null)
-const draft = ref<CustomRulesDraft>({ pre: [], post: [] })
+const draft = ref<CustomRulesDraft>({ pre: [], post: [], fakeIpFilter: [] })
 const editing = ref<EditingLocation | null>(null)
 const editor = ref<CustomRule | null>(null)
 const editorParams = ref('')
@@ -400,10 +402,6 @@ const targets = computed(() =>
   ),
 )
 
-const cloneDraft = (value: CustomRulesDraft): CustomRulesDraft => ({
-  pre: structuredClone(value.pre),
-  post: structuredClone(value.post),
-})
 const displayError = (error: unknown) =>
   error instanceof Error ? error.message : t('customRulesOperationFailed')
 const rulePreview = (rule: CustomRule) =>
@@ -416,7 +414,7 @@ const load = async () => {
   try {
     const loaded = await fetchLocalCustomRules()
     state.value = loaded
-    draft.value = cloneDraft(loaded)
+    draft.value = cloneCustomRulesDraft(loaded)
     dirty.value = false
     cancelEdit()
   } catch (error) {
@@ -446,7 +444,7 @@ const beginAdd = (section: SectionKey) => {
 const beginEdit = (section: SectionKey, index: number) => {
   const rule = draft.value[section][index]
   editing.value = { section, index }
-  editor.value = structuredClone(rule)
+  editor.value = cloneCustomRule(rule)
   editorParams.value = rule.params.join(', ')
 }
 const cancelEdit = () => {
@@ -461,7 +459,7 @@ const toggleEditorMode = (raw: boolean) => {
 }
 const acceptEdit = () => {
   if (!editor.value || !editing.value) return
-  const next = structuredClone(editor.value)
+  const next = cloneCustomRule(editor.value)
   next.params = editorParams.value
     .split(',')
     .map((value) => value.trim())
@@ -503,7 +501,7 @@ const validate = async () => {
   errorMessage.value = ''
   statusMessage.value = ''
   try {
-    await validateLocalCustomRules(cloneDraft(draft.value))
+    await validateLocalCustomRules(cloneCustomRulesDraft(draft.value))
     statusMessage.value = t('customRulesValidationPassed')
   } catch (error) {
     errorMessage.value = displayError(error)
@@ -522,12 +520,12 @@ const save = async () => {
       () =>
         saveLocalCustomRules({
           expectedVersion,
-          ...cloneDraft(draft.value),
+          ...cloneCustomRulesDraft(draft.value),
         }),
       updateDependencies,
     )
     state.value = saved
-    draft.value = cloneDraft(saved)
+    draft.value = cloneCustomRulesDraft(saved)
     dirty.value = false
     statusMessage.value = t('customRulesSavedReloaded')
   } catch (error) {
@@ -555,7 +553,7 @@ const restoreLatest = async () => {
       updateDependencies,
     )
     state.value = restored
-    draft.value = cloneDraft(restored)
+    draft.value = cloneCustomRulesDraft(restored)
     dirty.value = false
     statusMessage.value = t('customRulesBackupRestored')
   } catch (error) {

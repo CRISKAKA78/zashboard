@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import { reactive } from 'vue'
 import {
   applyCustomRulesUpdate,
+  cloneCustomRule,
+  cloneCustomRulesDraft,
   CustomRulesApplyError,
+  type CustomRulesDraft,
   type CustomRulesState,
 } from '../../src/features/rule-intelligence/customRules.ts'
 
@@ -14,6 +18,65 @@ const savedState = (): CustomRulesState => ({
   backupId: 'backup-1',
   pre: [],
   post: [],
+  fakeIpFilter: [],
+})
+
+describe('custom rules transport cloning', () => {
+  it('normalizes Vue reactive drafts into structured-clone-safe plain data', () => {
+    const reactiveDraft = reactive<CustomRulesDraft>({
+      pre: [
+        {
+          id: 'rule-1',
+          mode: 'structured',
+          type: 'DOMAIN-WILDCARD',
+          value: '*.criskaka.com',
+          target: 'DIRECT',
+          params: ['no-resolve'],
+          raw: 'DOMAIN-WILDCARD,*.criskaka.com,DIRECT,no-resolve',
+        },
+      ],
+      post: [],
+      fakeIpFilter: ['*.criskaka.com'],
+    })
+
+    assert.throws(() => structuredClone(reactiveDraft.pre), /could not be cloned/i)
+
+    const clone = cloneCustomRulesDraft(reactiveDraft)
+    assert.doesNotThrow(() => structuredClone(clone))
+    assert.deepEqual(clone, {
+      pre: [
+        {
+          id: 'rule-1',
+          mode: 'structured',
+          type: 'DOMAIN-WILDCARD',
+          value: '*.criskaka.com',
+          target: 'DIRECT',
+          params: ['no-resolve'],
+          raw: 'DOMAIN-WILDCARD,*.criskaka.com,DIRECT,no-resolve',
+        },
+      ],
+      post: [],
+      fakeIpFilter: ['*.criskaka.com'],
+    })
+    assert.notEqual(clone.pre[0], reactiveDraft.pre[0])
+    assert.notEqual(clone.pre[0].params, reactiveDraft.pre[0].params)
+  })
+
+  it('clones a reactive rule edited in the Custom Rules panel', () => {
+    const rule = reactive({
+      id: 'rule-2',
+      mode: 'structured' as const,
+      type: 'DOMAIN' as const,
+      value: 'example.com',
+      target: 'DIRECT',
+      params: [],
+      raw: 'DOMAIN,example.com,DIRECT',
+    })
+
+    const clone = cloneCustomRule(rule)
+    assert.doesNotThrow(() => structuredClone(clone))
+    assert.deepEqual(clone, { ...rule, params: [] })
+  })
 })
 
 describe('custom rules reload orchestration', () => {

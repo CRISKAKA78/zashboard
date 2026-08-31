@@ -90,3 +90,24 @@ export const isIpInCidr = (addressInput: string, cidrInput: string) => {
   const shift = BigInt(address.bits - prefix)
   return address.value >> shift === network.value >> shift
 }
+
+/** Match Mihomo IP-SUFFIX semantics: compare the least-significant prefix bits. */
+export const isIpSuffixMatch = (addressInput: string, suffixInput: string) => {
+  const address = parseIpAddress(addressInput)
+  const separator = suffixInput.lastIndexOf('/')
+
+  if (!address || separator < 0) return false
+
+  const suffix = parseIpAddress(suffixInput.slice(0, separator))
+  const bitsText = suffixInput.slice(separator + 1)
+  if (!suffix || suffix.version !== address.version || !/^\d{1,3}$/u.test(bitsText)) {
+    return false
+  }
+
+  const bits = Number(bitsText)
+  if (bits < 0 || bits > address.bits) return false
+  if (bits === 0) return true
+
+  const mask = (1n << BigInt(bits)) - 1n
+  return (address.value & mask) === (suffix.value & mask)
+}

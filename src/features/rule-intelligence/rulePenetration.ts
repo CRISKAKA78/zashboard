@@ -1,6 +1,12 @@
 import type { Rule } from '@/types'
 import { findRuleFallback, isRuleEffectivelyDisabled } from './ruleFallback.ts'
-import { getDisplayRuleIndex, normalizeRuleType, searchRuleIntelligence } from './ruleQuery.ts'
+import {
+  entryFromDirectRule,
+  evaluateRuleEntryTraffic,
+  getDisplayRuleIndex,
+  normalizeRuleType,
+  searchRuleIntelligence,
+} from './ruleQuery.ts'
 import type {
   ProviderRuleSet,
   ProxyChainAnalysis,
@@ -46,16 +52,6 @@ const resolveTargetRoute = (
   return route
 }
 
-const matchesAtPosition = (
-  matches: readonly RuleIntelligenceMatch[],
-  position: number,
-  source: RuleIntelligenceMatch['source'],
-) =>
-  matches.find(
-    (match) =>
-      match.matchMode === 'traffic' && match.rulePosition === position && match.source === source,
-  )
-
 const providerBlocker = (
   rule: Rule,
   position: number,
@@ -83,7 +79,10 @@ const providerBlocker = (
   }[availability]
 
   return {
+    source: 'provider',
     providerName: rule.payload,
+    ruleType: 'RULE-SET',
+    ruleValue: rule.payload,
     ruleIndex: getDisplayRuleIndex(rule, position - 1),
     rulePosition: position,
     target: rule.proxy,
@@ -91,6 +90,62 @@ const providerBlocker = (
     message: issue?.message || availabilityIssue.message,
   }
 }
+
+const evaluationBlocker = (
+  rule: Rule,
+  position: number,
+  source: RulePenetrationBlocker['source'],
+  providerName: string | null,
+  type: string,
+  value: string,
+): RulePenetrationBlocker => ({
+  source,
+  providerName,
+  ruleType: type,
+  ruleValue: value,
+  ruleIndex: getDisplayRuleIndex(rule, position - 1),
+  rulePosition: position,
+  target: rule.proxy,
+  code: 'RULE_CONTEXT_REQUIRED',
+  message:
+    'This rule needs DNS, geodata, source, process, port, ingress, or nested-rule context that a host-only query does not provide.',
+})
+
+const providerMatch = (
+  rule: Rule,
+  position: number,
+  entry: ProviderRuleSet['entries'][number],
+): RuleIntelligenceMatch => ({
+  source: 'provider',
+  matchMode: 'traffic',
+  entry,
+  providerName: rule.payload,
+  ruleIndex: getDisplayRuleIndex(rule, position - 1),
+  rulePosition: position,
+  target: rule.proxy,
+})
+
+const directMatch = (rule: Rule, position: number): RuleIntelligenceMatch => ({
+  source: 'direct',
+  matchMode: 'traffic',
+  entry: entryFromDirectRule(rule),
+  providerName: null,
+  ruleIndex: getDisplayRuleIndex(rule, position - 1),
+  rulePosition: position,
+  target: rule.proxy,
+})
+
+const withoutEffectiveMatch = (
+  matches: readonly RuleIntelligenceMatch[],
+  effective: RuleIntelligenceMatch,
+) =>
+  matches.filter(
+    (candidate) =>
+      candidate.source !== effective.source ||
+      candidate.rulePosition !== effective.rulePosition ||
+      candidate.providerName !== effective.providerName ||
+      candidate.entry?.raw !== effective.entry?.raw,
+  )
 
 const baseResult = (
   search: ReturnType<typeof searchRuleIntelligence>,
@@ -124,6 +179,7 @@ export const resolveRulePenetration = (
 
   const availability = options.providerAvailability ?? 'ready'
   const availableProviders = new Set(providers.map((provider) => provider.name))
+  const providersByName = new Map(providers.map((provider) => [provider.name, provider]))
   const issues = new Map((options.providerIssues ?? []).map((issue) => [issue.provider, issue]))
   const fallback = findRuleFallback(rules)
 
@@ -151,29 +207,74 @@ export const resolveRulePenetration = (
         }
       }
 
-      const match = matchesAtPosition(search.matches, position, 'provider')
-      if (!match) continue
+      const provider = providersByName.get(rule.payload)!
+      let entryMatch: ProviderRuleSet['entries'][number] | null = null
+      let indeterminateEntry: ProviderRuleSet['entries'][number] | null = null
+      for (const entry of provider.entries) {
+        const evaluation = evaluateRuleEntryTraffic(entry, search.query)
+        if (evaluation === 'match') {
+          entryMatch = entry
+          break
+        }
+        if (evaluation === 'indeterminate' && !indeterminateEntry) indeterminateEntry = entry
+      }
+
+      if (!entryMatch) {
+        if (indeterminateEntry) {
+          return {
+            ...base,
+            status: 'indeterminate',
+            blocker: evaluationBlocker(
+              rule,
+              position,
+              'provider',
+              rule.payload,
+              normalizeRuleType(indeterminateEntry.type),
+              indeterminateEntry.value,
+            ),
+          }
+        }
+        continue
+      }
+
+      const match = providerMatch(rule, position, entryMatch)
 
       return {
         ...base,
         status: 'resolved',
         effectiveMatch: match,
         effectiveRuleIndex: match.ruleIndex,
-        otherMatches: search.matches.filter((candidate) => candidate !== match),
+        otherMatches: withoutEffectiveMatch(search.matches, match),
         target: match.target,
         route: match.target ? resolveTargetRoute(match.target, options.resolveProxyChain) : null,
       }
     }
 
-    const match = matchesAtPosition(search.matches, position, 'direct')
-    if (!match) continue
+    const evaluation = evaluateRuleEntryTraffic(entryFromDirectRule(rule), search.query)
+    if (evaluation === 'indeterminate') {
+      return {
+        ...base,
+        status: 'indeterminate',
+        blocker: evaluationBlocker(
+          rule,
+          position,
+          'direct',
+          null,
+          normalizeRuleType(rule.type),
+          rule.payload,
+        ),
+      }
+    }
+    if (evaluation === 'miss') continue
+
+    const match = directMatch(rule, position)
 
     return {
       ...base,
       status: 'resolved',
       effectiveMatch: match,
       effectiveRuleIndex: match.ruleIndex,
-      otherMatches: search.matches.filter((candidate) => candidate !== match),
+      otherMatches: withoutEffectiveMatch(search.matches, match),
       target: match.target,
       route: match.target ? resolveTargetRoute(match.target, options.resolveProxyChain) : null,
     }

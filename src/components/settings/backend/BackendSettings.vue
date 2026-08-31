@@ -101,6 +101,16 @@
             @change="handlerAllowLanChange"
           />
         </SettingItem>
+        <SettingItem
+          :setting-key="k.fakeIPFilter"
+          :when="isVisibleFakeIPFilter"
+          class="py-3"
+        >
+          <div class="flex w-full items-center justify-between gap-3">
+            <div class="setting-item-label">{{ $t('fakeIPFilter') }}</div>
+            <FakeIPFilterSettings />
+          </div>
+        </SettingItem>
       </div>
     </template>
 
@@ -153,6 +163,7 @@ import BackendVersion from '@/components/common/BackendVersion.vue'
 import BackendPortsGrid from '@/components/settings/backend/BackendPortsGrid.vue'
 import BackendSwitch from '@/components/settings/backend/BackendSwitch.vue'
 import DnsQuery from '@/components/settings/backend/DnsQuery.vue'
+import FakeIPFilterSettings from '@/components/settings/backend/FakeIPFilterSettings.vue'
 import SettingItem from '@/components/settings/SettingItem.vue'
 import { backendActions } from '@/composables/backendActions'
 import { isSettingVisible, useIsSettingVisible } from '@/composables/settings'
@@ -168,6 +179,7 @@ const isVisibleBackendSwitch = useIsSettingVisible(k.backend)
 const isVisiblePorts = useIsSettingVisible(k.ports)
 const isVisibleTunMode = useIsSettingVisible(k.tunMode)
 const isVisibleAllowLan = useIsSettingVisible(k.allowLan)
+const isVisibleFakeIPFilter = useIsSettingVisible(k.fakeIPFilter)
 const isVisibleCheckUpgrade = useIsSettingVisible(k.checkCoreUpgrade)
 const isVisibleAutoUpgrade = useIsSettingVisible(k.autoUpgradeCore)
 const isVisibleDnsQuery = useIsSettingVisible(k.DNSQuery)
@@ -185,7 +197,8 @@ const hasVisibleNetworkSettings = computed(
     !!configs.value &&
     (isVisiblePorts.value ||
       (!!configs.value.tun && canShowTunMode.value) ||
-      isVisibleAllowLan.value),
+      isVisibleAllowLan.value ||
+      isVisibleFakeIPFilter.value),
 )
 const hasVisibleUpgradeSettings = computed(
   () =>

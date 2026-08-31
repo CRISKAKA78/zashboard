@@ -104,6 +104,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         section: 'settingsSectionNetworkListening',
       },
       {
+        key: `${SETTINGS_MENU_KEY.backend}.fakeIPFilter`,
+        label: 'fakeIPFilter',
+        section: 'settingsSectionNetworkListening',
+        keywords: ['dns', 'fakeip', 'fake-ip'],
+      },
+      {
         key: `${SETTINGS_MENU_KEY.backend}.checkCoreUpgrade`,
         label: 'checkCoreUpgrade',
         section: 'settingsSectionCoreUpdates',

@@ -247,6 +247,10 @@ const zh: LANG_MESSAGE = {
   proxyGroupIconSize: '策略组图标尺寸',
   proxyGroupIconMargin: '策略组图标间距',
   allowLan: '允许局域网',
+  fakeIPFilter: 'Fake-IP 排除域名',
+  editFakeIPFilter: '编辑 Fake-IP 排除域名',
+  fakeIPFilterDescription: '每行填写一个域名；这些域名不会被解析为 Fake-IP。',
+  fakeIPFilterPlaceholder: '例如：\n+.example.com\nlocalhost',
   proxyChainDirection: '代理链方向',
   showFullProxyChain: '完整显示代理链',
   reverse: '反向',
@@ -453,6 +457,8 @@ const zh: LANG_MESSAGE = {
   ruleSearchResults: '搜索结果',
   rulePenetrationIndeterminate:
     '规则 #{index} 引用的 Provider {provider} 不可用，无法确定实际命中。',
+  rulePenetrationContextIndeterminate:
+    '规则 #{index}（{type}）需要当前域名或 IP 查询未提供的流量上下文，无法确定实际命中。',
   actualRuleMatch: '实际命中',
   ruleSource: '规则来源',
   directRuleSource: '直接规则',

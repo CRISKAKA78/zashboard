@@ -1,6 +1,6 @@
 {
   "name": "zashboard",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Zashboard with Rule Intelligence and a minimal Local Helper for Mihomo",
   "license": "MIT",
   "type": "module",

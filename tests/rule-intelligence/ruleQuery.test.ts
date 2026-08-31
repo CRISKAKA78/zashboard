@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { isIpInCidr } from '../../src/features/rule-intelligence/ip.ts'
+import { isIpInCidr, isIpSuffixMatch } from '../../src/features/rule-intelligence/ip.ts'
 import {
   classifyRuleQuery,
   doesRuleEntryMatchTraffic,
+  evaluateRuleEntryTraffic,
+  normalizeRuleType,
   searchRuleIntelligence,
 } from '../../src/features/rule-intelligence/ruleQuery.ts'
 import type { ProviderRuleSet, RuleEntry } from '../../src/features/rule-intelligence/types.ts'
@@ -53,6 +55,40 @@ describe('rule query matching', () => {
     assert.equal(doesRuleEntryMatchTraffic(keywordRule, classifyRuleQuery('example.com')), false)
   })
 
+  it('matches Mihomo DOMAIN-WILDCARD with zero-or-more and single-character wildcards', () => {
+    const wildcard = entry('DOMAIN-WILDCARD', 'ag.hga*.com')
+    const single = entry('DomainWildcard', 'cdn?.example.com')
+
+    assert.equal(doesRuleEntryMatchTraffic(wildcard, classifyRuleQuery('ag.hga030.com')), true)
+    assert.equal(doesRuleEntryMatchTraffic(wildcard, classifyRuleQuery('ag.hga.com')), true)
+    assert.equal(doesRuleEntryMatchTraffic(wildcard, classifyRuleQuery('xag.hga030.com')), false)
+    assert.equal(doesRuleEntryMatchTraffic(single, classifyRuleQuery('cdn1.example.com')), true)
+    assert.equal(doesRuleEntryMatchTraffic(single, classifyRuleQuery('cdn12.example.com')), false)
+  })
+
+  it('matches DOMAIN-REGEX case-insensitively and treats an invalid expression as unknown', () => {
+    assert.equal(
+      doesRuleEntryMatchTraffic(
+        entry('DomainRegex', '^ag\\.hga\\d+\\.com$'),
+        classifyRuleQuery('AG.HGA030.COM'),
+      ),
+      true,
+    )
+    assert.equal(
+      evaluateRuleEntryTraffic(entry('DOMAIN-REGEX', '['), classifyRuleQuery('example.com')),
+      'indeterminate',
+    )
+  })
+
+  it('normalizes every Controller spelling used by the supported destination matchers', () => {
+    assert.equal(normalizeRuleType('DomainWildcard'), 'DOMAIN-WILDCARD')
+    assert.equal(normalizeRuleType('DomainRegex'), 'DOMAIN-REGEX')
+    assert.equal(normalizeRuleType('IpCidr'), 'IP-CIDR')
+    assert.equal(normalizeRuleType('IpSuffix'), 'IP-SUFFIX')
+    assert.equal(normalizeRuleType('SrcIpAsn'), 'SRC-IP-ASN')
+    assert.equal(normalizeRuleType('ProcessPathWildcard'), 'PROCESS-PATH-WILDCARD')
+  })
+
   it('performs real IPv4 CIDR containment', () => {
     assert.equal(isIpInCidr('8.8.8.8', '8.8.8.0/24'), true)
     assert.equal(isIpInCidr('8.8.9.8', '8.8.8.0/24'), false)
@@ -63,6 +99,41 @@ describe('rule query matching', () => {
     assert.equal(isIpInCidr('2001:db8::1234', '2001:db8::/32'), true)
     assert.equal(isIpInCidr('2001:db9::1', '2001:db8::/32'), false)
     assert.equal(isIpInCidr('::ffff:192.0.2.128', '::ffff:192.0.2.0/120'), true)
+  })
+
+  it('performs Mihomo IP-SUFFIX matching for IPv4 and IPv6', () => {
+    assert.equal(isIpSuffixMatch('1.8.8.8', '8.8.8.8/24'), true)
+    assert.equal(isIpSuffixMatch('1.8.8.9', '8.8.8.8/24'), false)
+    assert.equal(isIpSuffixMatch('2001:db8::beef', '::beef/16'), true)
+    assert.equal(isIpSuffixMatch('2001:db8::feed', '::beef/16'), false)
+  })
+
+  it('marks geodata, source, process, and unresolved domain-to-IP rules indeterminate', () => {
+    const domain = classifyRuleQuery('example.com')
+    const ip = classifyRuleQuery('8.8.8.8')
+
+    for (const candidate of [
+      entry('GEOSITE', 'google'),
+      entry('GEOIP', 'US'),
+      entry('IP-ASN', '15169'),
+      entry('SRC-IP-CIDR', '192.168.0.0/16'),
+      entry('DST-PORT', '443'),
+      entry('PROCESS-NAME', 'browser'),
+      entry('AND', '(NETWORK,TCP),(DST-PORT,443)'),
+      entry('FUTURE-MIHOMO-TYPE', 'value'),
+    ]) {
+      assert.equal(
+        evaluateRuleEntryTraffic(candidate, candidate.type === 'GEOIP' ? ip : domain),
+        'indeterminate',
+      )
+    }
+    assert.equal(
+      evaluateRuleEntryTraffic(
+        { ...entry('IP-CIDR', '8.8.8.0/24'), raw: 'IP-CIDR,8.8.8.0/24,no-resolve' },
+        domain,
+      ),
+      'miss',
+    )
   })
 
   it('marks a keyword query as content search rather than a traffic match', () => {

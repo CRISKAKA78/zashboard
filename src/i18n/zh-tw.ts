@@ -247,6 +247,10 @@ const zhTW: LANG_MESSAGE = {
   proxyGroupIconSize: '策略組圖示尺寸',
   proxyGroupIconMargin: '策略組圖示間距',
   allowLan: '允許區域網路',
+  fakeIPFilter: 'Fake-IP 排除網域',
+  editFakeIPFilter: '編輯 Fake-IP 排除網域',
+  fakeIPFilterDescription: '每行填寫一個網域；這些網域不會被解析為 Fake-IP。',
+  fakeIPFilterPlaceholder: '例如：\n+.example.com\nlocalhost',
   proxyChainDirection: '代理鏈方向',
   showFullProxyChain: '完整顯示代理鏈',
   reverse: '反向',
@@ -453,6 +457,8 @@ const zhTW: LANG_MESSAGE = {
   ruleSearchResults: '搜尋結果',
   rulePenetrationIndeterminate:
     '規則 #{index} 參照的 Provider {provider} 不可用，無法確定實際命中。',
+  rulePenetrationContextIndeterminate:
+    '規則 #{index}（{type}）需要目前網域或 IP 查詢未提供的流量內容，無法確定實際命中。',
   actualRuleMatch: '實際命中',
   ruleSource: '規則來源',
   directRuleSource: '直接規則',

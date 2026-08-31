@@ -26,10 +26,29 @@ const result = (entries) => ({
 
 describe('Rule Provider Explorer projection', () => {
   it('uses the documented domain/IP families and keeps params separate from raw', () => {
-    for (const type of ['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD']) {
+    for (const type of [
+      'DOMAIN',
+      'DOMAIN-SUFFIX',
+      'DOMAIN-KEYWORD',
+      'DOMAIN-REGEX',
+      'DOMAIN-WILDCARD',
+      'GEOSITE',
+    ]) {
       assert.equal(getRuleEntryFamily(entry(1, type)), 'domain')
     }
-    for (const type of ['IP-CIDR', 'IP-CIDR6', 'SRC-IP', 'SRC-IP-CIDR', 'SRC-IP-CIDR6', 'GEOIP']) {
+    for (const type of [
+      'IP-CIDR',
+      'IP-CIDR6',
+      'IP-SUFFIX',
+      'IP-ASN',
+      'SRC-IP',
+      'SRC-IP-CIDR',
+      'SRC-IP-CIDR6',
+      'SRC-IP-SUFFIX',
+      'SRC-IP-ASN',
+      'SRC-GEOIP',
+      'GEOIP',
+    ]) {
       assert.equal(getRuleEntryFamily(entry(1, type)), 'ip')
     }
     assert.equal(getRuleEntryFamily(entry(1, 'PROCESS-NAME')), 'other')

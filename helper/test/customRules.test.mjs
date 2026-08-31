@@ -7,6 +7,7 @@ import { describe, it } from 'node:test'
 import { parse } from 'yaml'
 import {
   buildManagedConfig,
+  CUSTOM_RULE_TYPES,
   normalizeCustomRules,
   serializeManagedConfig,
 } from '../src/customRuleModel.mjs'
@@ -32,6 +33,10 @@ proxy-groups:
   - name: Proxy
     type: select
     proxies: [Node, DIRECT]
+dns:
+  enable: true
+  fake-ip-filter:
+    - source.example
 rules:
   - DOMAIN,original.example,Proxy
   - MATCH,DIRECT
@@ -72,14 +77,96 @@ const structuredRule = (id, type, value, target, params = []) => ({
 
 const noOpValidation = async () => {}
 
-const save = (fixture, state, pre, post, dependencies = {}) =>
+const save = (fixture, state, pre, post, dependencies = {}, fakeIpFilter = state.fakeIpFilter) =>
   saveCustomRules(
     fixture.settings,
-    { expectedVersion: state.version, pre, post },
+    { expectedVersion: state.version, pre, post, fakeIpFilter },
     { validateConfig: noOpValidation, ...dependencies },
   )
 
 describe('custom rules management', () => {
+  it('accepts every Mihomo rule type exposed by the editor, including nested logical raw rules', async (t) => {
+    const fixture = await createFixture(t)
+    const rules = CUSTOM_RULE_TYPES.filter((type) => type !== 'MATCH').map((type, index) =>
+      structuredRule(
+        `type-${index}`,
+        type,
+        ['AND', 'OR', 'NOT'].includes(type) ? '((NETWORK,TCP),(DST-PORT,443))' : 'value',
+        'DIRECT',
+      ),
+    )
+    const nestedRaw = {
+      id: 'nested',
+      mode: 'raw',
+      raw: 'AND,((NETWORK,TCP),(DST-PORT,443)),REJECT',
+    }
+
+    const validation = await validateCustomRules(
+      fixture.settings,
+      { pre: [...rules, nestedRaw], post: [], fakeIpFilter: ['source.example'] },
+      { validateConfig: noOpValidation },
+    )
+
+    assert.equal(validation.preCount, rules.length + 1)
+  })
+
+  it('manages Fake-IP filters in the same validated runtime, version, backup, and rollback flow', async (t) => {
+    const fixture = await createFixture(t)
+    const initial = await getCustomRules(fixture.settings)
+    assert.deepEqual(initial.fakeIpFilter, ['source.example'])
+
+    const first = await saveCustomRules(
+      fixture.settings,
+      {
+        expectedVersion: initial.version,
+        pre: [],
+        post: [],
+        fakeIpFilter: ['+.one.example', 'localhost', '+.one.example'],
+      },
+      { validateConfig: noOpValidation },
+    )
+    assert.deepEqual(first.fakeIpFilter, ['+.one.example', 'localhost'])
+    const runtime = parse(await readFile(first.runtimeConfigPath, 'utf8'))
+    assert.deepEqual(runtime.dns['fake-ip-filter'], ['+.one.example', 'localhost'])
+    assert.deepEqual(
+      parse(await readFile(join(fixture.settings.customRulesDir, 'fake-ip-filter.yaml'), 'utf8'))[
+        'fake-ip-filter'
+      ],
+      ['+.one.example', 'localhost'],
+    )
+
+    const second = await saveCustomRules(
+      fixture.settings,
+      {
+        expectedVersion: first.version,
+        pre: [],
+        post: [],
+        fakeIpFilter: ['+.two.example'],
+      },
+      { validateConfig: noOpValidation },
+    )
+    const restored = await restoreCustomRulesBackup(
+      fixture.settings,
+      { expectedVersion: second.version, backupId: second.backupId },
+      { validateConfig: noOpValidation },
+    )
+    assert.deepEqual(restored.fakeIpFilter, ['+.one.example', 'localhost'])
+  })
+
+  it('rejects malformed Fake-IP filter state before writing managed files', async (t) => {
+    const fixture = await createFixture(t)
+
+    await assert.rejects(
+      () =>
+        validateCustomRules(
+          fixture.settings,
+          { pre: [], post: [], fakeIpFilter: ['valid.example', ''] },
+          { validateConfig: noOpValidation },
+        ),
+      (error) => error instanceof LocalHelperError && error.code === 'CUSTOM_RULE_INVALID',
+    )
+  })
+
   it('adds, edits, deletes, and reorders rules while keeping fallback last', async (t) => {
     const fixture = await createFixture(t)
     const initial = await getCustomRules(fixture.settings)
@@ -277,13 +364,20 @@ describe('custom rules management', () => {
 
     await assert.rejects(
       () =>
-        save(fixture, saved, [structuredRule('new', 'DOMAIN', 'new.example', 'REJECT')], [], {
-          replaceCandidate: async (temporary, target) => {
-            replacements += 1
-            if (replacements === 2) throw diskError
-            await rename(temporary, target)
+        save(
+          fixture,
+          saved,
+          [structuredRule('new', 'DOMAIN', 'new.example', 'REJECT')],
+          [],
+          {
+            replaceCandidate: async (temporary, target) => {
+              replacements += 1
+              if (replacements === 4) throw diskError
+              await rename(temporary, target)
+            },
           },
-        }),
+          ['changed.example'],
+        ),
       (error) => error instanceof LocalHelperError && error.code === 'CUSTOM_RULES_WRITE_FAILED',
     )
 
@@ -294,6 +388,8 @@ describe('custom rules management', () => {
     )
     const runtime = parse(await readFile(current.runtimeConfigPath, 'utf8'))
     assert.equal(runtime.rules[0], 'DOMAIN,old.example,DIRECT')
+    assert.deepEqual(current.fakeIpFilter, ['source.example'])
+    assert.deepEqual(runtime.dns['fake-ip-filter'], ['source.example'])
   })
 
   it('serializes simultaneous saves and rejects the stale writer', async (t) => {

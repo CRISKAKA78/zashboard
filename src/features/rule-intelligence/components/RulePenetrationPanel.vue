@@ -118,10 +118,15 @@
           <div class="min-w-0">
             <p class="font-medium">
               {{
-                $t('rulePenetrationIndeterminate', {
-                  provider: penetration.blocker?.providerName,
-                  index: penetration.blocker?.ruleIndex,
-                })
+                penetration.blocker?.source === 'provider'
+                  ? $t('rulePenetrationIndeterminate', {
+                      provider: penetration.blocker.providerName,
+                      index: penetration.blocker.ruleIndex,
+                    })
+                  : $t('rulePenetrationContextIndeterminate', {
+                      type: penetration.blocker?.ruleType,
+                      index: penetration.blocker?.ruleIndex,
+                    })
               }}
             </p>
             <p class="text-base-content/60 mt-1 break-words">

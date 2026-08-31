@@ -2,10 +2,40 @@ export const CUSTOM_RULE_TYPES = [
   'DOMAIN',
   'DOMAIN-SUFFIX',
   'DOMAIN-KEYWORD',
+  'DOMAIN-REGEX',
+  'DOMAIN-WILDCARD',
+  'GEOSITE',
+  'GEOIP',
+  'SRC-GEOIP',
+  'IP-ASN',
+  'SRC-IP-ASN',
   'IP-CIDR',
   'IP-CIDR6',
+  'SRC-IP-CIDR',
+  'SRC-IP-CIDR6',
+  'IP-SUFFIX',
+  'SRC-IP-SUFFIX',
+  'SRC-PORT',
+  'DST-PORT',
+  'IN-PORT',
+  'DSCP',
+  'IN-USER',
+  'IN-NAME',
+  'IN-TYPE',
+  'PROCESS-NAME',
+  'PROCESS-PATH',
+  'PROCESS-NAME-REGEX',
+  'PROCESS-PATH-REGEX',
+  'PROCESS-NAME-WILDCARD',
+  'PROCESS-PATH-WILDCARD',
+  'REMATCH-NAME',
   'RULE-SET',
-  'GEOIP',
+  'NETWORK',
+  'UID',
+  'SUB-RULE',
+  'AND',
+  'OR',
+  'NOT',
   'MATCH',
 ] as const
 
@@ -25,7 +55,30 @@ export type CustomRule = {
 export type CustomRulesDraft = {
   pre: CustomRule[]
   post: CustomRule[]
+  fakeIpFilter: string[]
 }
+
+/** Convert Vue reactive rule data into transport-safe plain objects. */
+export const cloneCustomRule = (rule: CustomRule): CustomRule => ({
+  id: rule.id,
+  mode: rule.mode,
+  type: rule.type,
+  value: rule.value,
+  target: rule.target,
+  params: [...rule.params],
+  raw: rule.raw,
+})
+
+/**
+ * Keep the Helper API boundary free of Vue proxies. `structuredClone` rejects
+ * reactive Proxy objects, while explicit field copies also document the draft
+ * that may cross the local HTTP boundary.
+ */
+export const cloneCustomRulesDraft = (draft: CustomRulesDraft): CustomRulesDraft => ({
+  pre: draft.pre.map(cloneCustomRule),
+  post: draft.post.map(cloneCustomRule),
+  fakeIpFilter: [...draft.fakeIpFilter],
+})
 
 export type CustomRulesBackup = {
   id: string
@@ -44,6 +97,7 @@ export type CustomRulesValidation = {
   valid: true
   preCount: number
   postCount: number
+  fakeIpFilterCount: number
   runtimeConfigPath: string
 }
 

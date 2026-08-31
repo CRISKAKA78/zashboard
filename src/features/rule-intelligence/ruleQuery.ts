@@ -1,17 +1,21 @@
 import type { Rule } from '@/types'
-import { isIpInCidr, parseIpAddress } from './ip.ts'
+import { isIpInCidr, isIpSuffixMatch, parseIpAddress } from './ip.ts'
 import { isRuleEffectivelyDisabled } from './ruleFallback.ts'
-import { normalizeRuleType } from './ruleType.ts'
+import {
+  CONTEXT_RULE_TYPES,
+  DESTINATION_IP_RULE_TYPES,
+  DOMAIN_RULE_TYPES,
+  normalizeRuleType,
+} from './ruleType.ts'
 import type {
   ProviderRuleSet,
   RuleEntry,
   RuleIntelligenceMatch,
   RuleIntelligenceResult,
   RuleQuery,
+  RuleTrafficEvaluation,
 } from './types.ts'
 
-const DOMAIN_TYPES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD'])
-const IP_TYPES = new Set(['IP-CIDR', 'IP-CIDR6'])
 const MAX_RESULTS = 200
 
 export { normalizeRuleType }
@@ -42,28 +46,90 @@ export const classifyRuleQuery = (input: string): RuleQuery => {
   return { raw, normalized: raw.toLowerCase(), kind: 'keyword' }
 }
 
-export const doesRuleEntryMatchTraffic = (entry: RuleEntry, query: RuleQuery) => {
-  const type = normalizeRuleType(entry.type)
-
-  if (query.kind === 'domain' && DOMAIN_TYPES.has(type)) {
-    const value = normalizeDomain(entry.value).replace(/^(?:\+\.|\*\.|\.)/u, '')
-    if (!value) return false
-
-    if (type === 'DOMAIN') return query.normalized === value
-    if (type === 'DOMAIN-SUFFIX') {
-      return query.normalized === value || query.normalized.endsWith(`.${value}`)
-    }
-    return query.normalized.includes(value)
-  }
-
-  if (query.kind === 'ip' && IP_TYPES.has(type)) {
-    return isIpInCidr(query.normalized, entry.value.trim())
-  }
-
-  return false
+const wildcardToRegExp = (pattern: string) => {
+  const source = [...pattern]
+    .map((character) => {
+      if (character === '*') return '.*'
+      if (character === '?') return '.'
+      return character.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')
+    })
+    .join('')
+  return new RegExp(`^${source}$`, 'iu')
 }
 
-const entryFromDirectRule = (rule: Rule): RuleEntry => ({
+const hasNoResolve = (entry: RuleEntry) =>
+  entry.source !== 'direct' &&
+  String(entry.raw)
+    .split(',')
+    .slice(2)
+    .some((field) => field.trim().toLowerCase() === 'no-resolve')
+
+const evaluateDomainRule = (
+  type: string,
+  value: string,
+  subject: string,
+): RuleTrafficEvaluation => {
+  if (type === 'GEOSITE') return 'indeterminate'
+
+  if (type === 'DOMAIN-REGEX') {
+    try {
+      return new RegExp(value.trim(), 'iu').test(subject) ? 'match' : 'miss'
+    } catch {
+      return 'indeterminate'
+    }
+  }
+
+  if (type === 'DOMAIN-WILDCARD') {
+    try {
+      return wildcardToRegExp(value.trim()).test(subject) ? 'match' : 'miss'
+    } catch {
+      return 'indeterminate'
+    }
+  }
+
+  const normalizedValue = normalizeDomain(value).replace(/^(?:\+\.|\*\.|\.)/u, '')
+  if (!normalizedValue) return 'miss'
+  if (type === 'DOMAIN') return subject === normalizedValue ? 'match' : 'miss'
+  if (type === 'DOMAIN-SUFFIX') {
+    return subject === normalizedValue || subject.endsWith(`.${normalizedValue}`) ? 'match' : 'miss'
+  }
+  return subject.includes(normalizedValue) ? 'match' : 'miss'
+}
+
+/**
+ * Evaluate only what can be proven from a destination host/IP. Rules that need
+ * DNS, geodata, source/process/port/ingress metadata, or nested rule context
+ * deliberately return indeterminate so penetration never invents a route.
+ */
+export const evaluateRuleEntryTraffic = (
+  entry: RuleEntry,
+  query: RuleQuery,
+): RuleTrafficEvaluation => {
+  const type = normalizeRuleType(entry.type)
+
+  if (DOMAIN_RULE_TYPES.has(type)) {
+    return evaluateDomainRule(type, entry.value, query.normalized)
+  }
+
+  if (DESTINATION_IP_RULE_TYPES.has(type)) {
+    if (query.kind === 'domain') return hasNoResolve(entry) ? 'miss' : 'indeterminate'
+    if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
+      return isIpInCidr(query.normalized, entry.value.trim()) ? 'match' : 'miss'
+    }
+    if (type === 'IP-SUFFIX') {
+      return isIpSuffixMatch(query.normalized, entry.value.trim()) ? 'match' : 'miss'
+    }
+    return 'indeterminate'
+  }
+
+  if (CONTEXT_RULE_TYPES.has(type)) return 'indeterminate'
+  return 'indeterminate'
+}
+
+export const doesRuleEntryMatchTraffic = (entry: RuleEntry, query: RuleQuery) =>
+  evaluateRuleEntryTraffic(entry, query) === 'match'
+
+export const entryFromDirectRule = (rule: Rule): RuleEntry => ({
   source: 'direct',
   type: normalizeRuleType(rule.type),
   value: rule.payload,

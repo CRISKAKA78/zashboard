@@ -14,8 +14,27 @@ const EXPLORER_QUERY_KEYS = new Set([
 const FAMILIES = new Set(['all', 'domain', 'ip', 'other'])
 const SORT_KEYS = new Set(['type', 'content', 'params', 'raw'])
 const SORT_DIRECTIONS = new Set(['default', 'asc', 'desc'])
-const DOMAIN_TYPES = new Set(['DOMAIN', 'DOMAIN-SUFFIX', 'DOMAIN-KEYWORD'])
-const IP_TYPES = new Set(['IP-CIDR', 'IP-CIDR6', 'SRC-IP', 'SRC-IP-CIDR', 'SRC-IP-CIDR6', 'GEOIP'])
+const DOMAIN_TYPES = new Set([
+  'DOMAIN',
+  'DOMAIN-SUFFIX',
+  'DOMAIN-KEYWORD',
+  'DOMAIN-REGEX',
+  'DOMAIN-WILDCARD',
+  'GEOSITE',
+])
+const IP_TYPES = new Set([
+  'IP-CIDR',
+  'IP-CIDR6',
+  'IP-SUFFIX',
+  'IP-ASN',
+  'GEOIP',
+  'SRC-IP',
+  'SRC-IP-CIDR',
+  'SRC-IP-CIDR6',
+  'SRC-IP-SUFFIX',
+  'SRC-IP-ASN',
+  'SRC-GEOIP',
+])
 
 const normalizeType = (type) =>
   String(type || '')
