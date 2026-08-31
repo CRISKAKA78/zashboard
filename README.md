@@ -4,7 +4,7 @@
 部署的增强版本。
 
 ```text
-Project version: v1.2.0
+Project version: v1.3.0
 Based on Zephyruso/zashboard v3.24.0 (f6dd9c07)
 ```
 
@@ -26,7 +26,7 @@ Rules、DNS 和 Settings，并以低耦合方式加入 Rule Intelligence 以及�
 OpenClash/Nikki 管理器，也不会接管 Mihomo 的 Controller API。
 
 浏览器仍然直接使用 zashboard 原有 Mihomo 客户端访问 Controller。Local Helper 只处理浏览器
-做不到的本地文件和 CLI 操作：发现配置和 Provider、读取受限目录、转换 MRS、维护固定的
+做不到的本地文件和 CLI 操作：发现配置和 Provider、读取受限目录、转换 MRS、维护本地 file Provider 与固定的
 Pre/Post 自定义规则与 Fake-IP Filter 文件、执行 `mihomo -t` 校验。它不会代理 `/rules`、`/proxies`、
 `/connections` 或 `/logs`。
 
@@ -34,8 +34,8 @@ Pre/Post 自定义规则与 Fake-IP Filter 文件、执行 `mihomo -t` 校验。
 flowchart LR
   Browser[浏览器 / Zashboard] -->|原有 API| Controller[Mihomo Controller]
   Browser -->|/api/local/*| Helper[Local Helper]
-  Helper -->|只读| Config[Mihomo 配置与 Provider]
-  Helper -->|固定目录、原子写入| Custom[自定义规则与运行时配置]
+  Helper -->|只读| Config[Mihomo 配置与远端 Provider 缓存]
+  Helper -->|受限目录、原子写入| Custom[本地 Provider、自定义规则与运行时配置]
   Helper -->|校验与 MRS 转换| Binary[Mihomo 二进制]
 ```
 
@@ -46,7 +46,7 @@ flowchart LR
 - Domain（含 Wildcard/Regex）、IP/CIDR/IP-Suffix 和关键字规则搜索，覆盖直接规则及可读取的 Rule Provider。
 - 有效规则穿透：按真实顺序解释最早可确定的规则、目标策略、代理链和最终出站。
 - Text、YAML 及 `domain`/`ipcidr` MRS Provider 的统一解析与缓存。
-- Rule Provider Explorer：类型计数、搜索、稳定排序、原文复制和 Helper 端分页。
+- Rule Provider Explorer：类型计数、搜索、稳定排序、原文复制和 Helper 端分页；本地 `type: file` 的 Text/YAML Provider 支持增删改，HTTP/MRS 等 Provider 保持只读。
 - 设置页同时显示本项目自定义版本与 zashboard 官方最新版；版本检查完全只读，面板不提供在线升级入口，也不会请求内核替换 UI。
 - 裸 Mihomo Pre/Post 自定义规则：固定文件、并发版本检查、`mihomo -t` 校验、原子保存、
   有界备份和失败回滚；源配置始终只读。
@@ -234,7 +234,7 @@ Helper EnvironmentFile、自定义规则和 Web Server 配置，然后在普通�
 
 ```bash
 git fetch --tags origin
-git switch --detach v1.2.0
+git switch --detach v1.3.0
 pnpm install --frozen-lockfile
 pnpm build:no-fonts
 sudo bash deploy/install.sh \
@@ -245,7 +245,7 @@ sudo bash deploy/install.sh \
   --custom-rules-dir /etc/mihomo/custom
 ```
 
-将 `v1.2.0` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
+将 `v1.3.0` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
 `git switch main && git pull --ff-only origin main`，但 `main` 可能包含尚未打标签的后续提交。
 
 安装器先准备新的 commit 目录，再切换 `current` 符号链接；原 UI 会进入备份。systemd 启动或健康
@@ -275,15 +275,14 @@ sudo bash deploy/uninstall.sh --remove-ui --purge-config
 - CORS 不是网络访问控制的替代品。非回环部署必须配合防火墙或受认证的 TLS 反向代理。
 - Helper API 接受 Provider 名称和结构化规则，不接受任意文件路径。
 - Provider 文件在 `realpath` 后必须位于 `MIHOMO_RULES_DIR`；缺失路径通过最近存在祖先校验。
-- Mihomo 源配置只读。写操作只进入 `MIHOMO_CUSTOM_RULES_DIR` 下的固定文件。
-- 自定义规则使用 `0600` 临时文件、flush、`mihomo -t`、有界备份和同目录原子 rename。
+- Mihomo 源配置只读。Provider 写操作仅允许源配置中 `type: file`、路径位于 `MIHOMO_RULES_DIR`、格式为 Text/YAML 的现有文件；HTTP、MRS 和其他 Provider 只读。
+- 本地 Provider 和自定义规则写入均使用并发版本检查、临时文件、flush、`mihomo -t`、有界备份和同目录原子 rename。
 - 安装器不需要 SSH 密码、Controller secret、GitHub token 或 API token，也不会采集它们。
-- EnvironmentFile 使用 `0600`；systemd unit 启用 `NoNewPrivileges`、空 capability 集以及多项 namespace、
-  kernel、home 和设备隔离。
+- EnvironmentFile 使用 `0600`；systemd unit 启用 `NoNewPrivileges`、`ProtectSystem=strict`、空 capability 集以及多项 namespace、kernel、home 和设备隔离，并只将实际 `MIHOMO_RULES_DIR` 与 `MIHOMO_CUSTOM_RULES_DIR` 设为可写。
 
 Local Helper 以 root 运行，是为了兼容通常仅 root 可读的 Mihomo 配置和 Provider。若你的文件权限
-允许，可复制 service 模板并使用专用用户；该方案需要自行确保该用户只能读源配置/Provider，且只
-能写自定义规则目录。
+允许，可复制 service 模板并使用专用用户；该方案需要自行确保该用户只能读源配置和远端 Provider
+缓存，且只能写源配置声明的本地 file Provider 与自定义规则目录。
 
 ## 故障排查
 

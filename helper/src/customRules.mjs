@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { constants } from 'node:fs'
-import { access, chmod, lstat, mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises'
+import { access, chmod, lstat, mkdir, open, readdir, readFile, rm } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { readMihomoConfig } from './configDiscovery.mjs'
@@ -15,10 +15,16 @@ import {
   serializeManagedConfig,
 } from './customRuleModel.mjs'
 import { LocalHelperError } from './errors.mjs'
+import {
+  replaceCandidate,
+  temporaryPath,
+  withWriteLock,
+  writeSourceAtomic,
+  writeTemporary,
+} from './managedFiles.mjs'
 
 const execFileAsync = promisify(execFile)
 const MAX_MANAGED_FILE_BYTES = 4 * 1024 * 1024
-const writeLocks = new Map()
 
 const pathsFor = (settings) => {
   const customRulesDir = resolve(
@@ -144,52 +150,6 @@ const loadState = async (settings) => {
       fakeIpFilterSource,
       runtimeSource,
     }),
-  }
-}
-
-const temporaryPath = (directory, label) =>
-  join(directory, `.${label}-${process.pid}-${randomBytes(12).toString('hex')}.tmp`)
-
-const writeTemporary = async (path, source) => {
-  const handle = await open(path, 'wx', 0o600)
-  try {
-    await handle.writeFile(source, 'utf8')
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-}
-
-const syncDirectory = async (path) => {
-  let handle
-  try {
-    handle = await open(path, 'r')
-    await handle.sync()
-  } catch (error) {
-    if (!['EINVAL', 'EBADF', 'ENOTSUP', 'EPERM', 'EISDIR'].includes(error?.code)) throw error
-  } finally {
-    await handle?.close().catch(() => {})
-  }
-}
-
-const replaceCandidate = async (temporary, target) => {
-  await rename(temporary, target)
-  await chmod(target, 0o600).catch(() => {})
-  await syncDirectory(dirname(target))
-}
-
-const writeSourceAtomic = async (target, source) => {
-  if (source === null) {
-    await rm(target, { force: true })
-    await syncDirectory(dirname(target))
-    return
-  }
-  const temporary = temporaryPath(dirname(target), 'restore')
-  try {
-    await writeTemporary(temporary, source)
-    await replaceCandidate(temporary, target)
-  } finally {
-    await rm(temporary, { force: true }).catch(() => {})
   }
 }
 
@@ -388,23 +348,6 @@ const readBackupRules = async (paths, id, fallbackFakeIpFilter) => {
       404,
       { cause: error },
     )
-  }
-}
-
-const withWriteLock = async (key, operation) => {
-  const previous = writeLocks.get(key) ?? Promise.resolve()
-  let release
-  const gate = new Promise((resolveGate) => {
-    release = resolveGate
-  })
-  const tail = previous.then(() => gate)
-  writeLocks.set(key, tail)
-  await previous
-  try {
-    return await operation()
-  } finally {
-    release()
-    if (writeLocks.get(key) === tail) writeLocks.delete(key)
   }
 }
 

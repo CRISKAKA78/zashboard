@@ -24,21 +24,21 @@ The service binds to `127.0.0.1:8787` by default. Keeping it on loopback and rev
 
 ## Environment variables
 
-| Variable                                    | Default                     | Purpose                                                                     |
-| ------------------------------------------- | --------------------------- | --------------------------------------------------------------------------- |
-| `MIHOMO_CONFIG_PATH`                        | `/etc/mihomo/config.yaml`   | Source Mihomo YAML configuration                                            |
-| `MIHOMO_BINARY`                             | `/usr/bin/mihomo`           | Mihomo executable used for checks, MRS conversion, and validation           |
-| `MIHOMO_RULES_DIR`                          | `<config directory>/rules`  | Only directory from which provider files may be inspected                   |
-| `MIHOMO_CUSTOM_RULES_DIR`                   | `<config directory>/custom` | Fixed storage root for rules, backups, and the generated runtime config     |
-| `LOCAL_HELPER_HOST`                         | `127.0.0.1`                 | Listen address                                                              |
-| `LOCAL_HELPER_PORT`                         | `8787`                      | Listen port                                                                 |
-| `LOCAL_HELPER_MAX_PROVIDER_BYTES`           | `8388608`                   | Maximum Text/YAML/MRS Provider file size read by the Helper                 |
-| `LOCAL_HELPER_MRS_TIMEOUT_MS`               | `15000`                     | Timeout for one Mihomo MRS conversion, from 100 to 120000 milliseconds      |
-| `LOCAL_HELPER_CONFIG_VALIDATION_TIMEOUT_MS` | `20000`                     | Timeout for `mihomo -t`, from 100 to 120000 milliseconds                    |
-| `LOCAL_HELPER_CUSTOM_RULES_BACKUPS`         | `3`                         | Retained custom-rule backups, from 1 to 20                                  |
-| `LOCAL_HELPER_MAX_REQUEST_BYTES`            | `524288`                    | Maximum custom-rule JSON body, from 1024 to 4194304 bytes                   |
-| `LOCAL_HELPER_ALLOWED_ORIGINS`              | empty                       | Comma-separated cross-origin allowlist; same-origin requests remain allowed |
-| `VITE_LOCAL_HELPER_URL`                     | empty                       | Optional frontend build-time base URL; empty uses the zashboard origin      |
+| Variable                                    | Default                     | Purpose                                                                                  |
+| ------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
+| `MIHOMO_CONFIG_PATH`                        | `/etc/mihomo/config.yaml`   | Source Mihomo YAML configuration                                                         |
+| `MIHOMO_BINARY`                             | `/usr/bin/mihomo`           | Mihomo executable used for checks, MRS conversion, and validation                        |
+| `MIHOMO_RULES_DIR`                          | `<config directory>/rules`  | Only directory from which provider files may be inspected or local file Providers edited |
+| `MIHOMO_CUSTOM_RULES_DIR`                   | `<config directory>/custom` | Fixed storage root for rules, backups, and the generated runtime config                  |
+| `LOCAL_HELPER_HOST`                         | `127.0.0.1`                 | Listen address                                                                           |
+| `LOCAL_HELPER_PORT`                         | `8787`                      | Listen port                                                                              |
+| `LOCAL_HELPER_MAX_PROVIDER_BYTES`           | `8388608`                   | Maximum Text/YAML/MRS Provider file size read by the Helper                              |
+| `LOCAL_HELPER_MRS_TIMEOUT_MS`               | `15000`                     | Timeout for one Mihomo MRS conversion, from 100 to 120000 milliseconds                   |
+| `LOCAL_HELPER_CONFIG_VALIDATION_TIMEOUT_MS` | `20000`                     | Timeout for `mihomo -t`, from 100 to 120000 milliseconds                                 |
+| `LOCAL_HELPER_CUSTOM_RULES_BACKUPS`         | `3`                         | Retained custom-rule backups, from 1 to 20                                               |
+| `LOCAL_HELPER_MAX_REQUEST_BYTES`            | `524288`                    | Maximum custom-rule JSON body, from 1024 to 4194304 bytes                                |
+| `LOCAL_HELPER_ALLOWED_ORIGINS`              | empty                       | Comma-separated cross-origin allowlist; same-origin requests remain allowed              |
+| `VITE_LOCAL_HELPER_URL`                     | empty                       | Optional frontend build-time base URL; empty uses the zashboard origin                   |
 
 ## API
 

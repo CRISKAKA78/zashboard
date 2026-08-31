@@ -13,7 +13,7 @@
         :class="loading ? 'animate-spin' : ''"
         :aria-label="$t('refreshProviderRules')"
         :title="$t('refreshProviderRules')"
-        :disabled="loading"
+        :disabled="loading || mutating"
         @click="loadPage"
       >
         <ArrowPathIcon class="h-4 w-4" />
@@ -21,16 +21,39 @@
     </template>
 
     <div class="border-base-content/10 shrink-0 space-y-3 border-b p-3 sm:p-4">
-      <div class="text-base-content/55 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span>{{ $t('behavior') }}: {{ providerInfo?.behavior || provider?.behavior || '-' }}</span>
-        <span>{{ $t('format') }}: {{ providerInfo?.format || provider?.format || '-' }}</span>
-        <span v-if="providerInfo?.size !== null && providerInfo?.size !== undefined">
-          {{ formatBytes(providerInfo.size) }}
-        </span>
-        <span v-if="providerInfo?.mtime">
-          {{ $t('updated') }}: {{ formatMtime(providerInfo.mtime) }}
-        </span>
-        <span v-if="pageResult">{{ $t('cache') }}: {{ pageResult.cache }}</span>
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div
+          class="text-base-content/55 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+        >
+          <span
+            >{{ $t('behavior') }}: {{ providerInfo?.behavior || provider?.behavior || '-' }}</span
+          >
+          <span>{{ $t('format') }}: {{ providerInfo?.format || provider?.format || '-' }}</span>
+          <span v-if="providerInfo?.size !== null && providerInfo?.size !== undefined">
+            {{ formatBytes(providerInfo.size) }}
+          </span>
+          <span v-if="providerInfo?.mtime">
+            {{ $t('updated') }}: {{ formatMtime(providerInfo.mtime) }}
+          </span>
+          <span v-if="pageResult">{{ $t('cache') }}: {{ pageResult.cache }}</span>
+          <span
+            v-if="providerInfo"
+            class="badge badge-sm"
+            :class="editable ? 'badge-success' : 'badge-ghost'"
+          >
+            {{ editable ? $t('localProviderEditable') : $t('providerReadOnly') }}
+          </span>
+        </div>
+        <button
+          v-if="editable"
+          type="button"
+          class="btn btn-primary btn-xs"
+          :disabled="mutating"
+          @click="beginAdd"
+        >
+          <PlusIcon class="h-3.5 w-3.5" />
+          {{ $t('addRule') }}
+        </button>
       </div>
 
       <div class="overflow-x-auto pb-0.5">
@@ -52,6 +75,68 @@
         />
       </label>
       <p class="text-base-content/45 text-xs">{{ $t('providerRuleContentSearchNotice') }}</p>
+
+      <div
+        v-if="editor"
+        class="border-primary/25 bg-primary/5 rounded-box space-y-2 border p-3"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="text-xs font-semibold">
+            {{
+              editor.operation === 'add' ? $t('addLocalProviderRule') : $t('editLocalProviderRule')
+            }}
+          </p>
+          <button
+            type="button"
+            class="btn btn-circle btn-ghost btn-xs"
+            :aria-label="$t('cancel')"
+            :title="$t('cancel')"
+            :disabled="mutating"
+            @click="cancelEdit"
+          >
+            <XMarkIcon class="h-4 w-4" />
+          </button>
+        </div>
+        <input
+          v-model="editor.raw"
+          type="text"
+          class="input input-bordered input-sm w-full font-mono"
+          :placeholder="$t('localProviderRulePlaceholder')"
+          maxlength="4096"
+          :disabled="mutating"
+          @keyup.enter="saveEditor"
+        />
+        <div class="flex justify-end gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-xs"
+            :disabled="mutating"
+            @click="cancelEdit"
+          >
+            {{ $t('cancel') }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary btn-xs"
+            :disabled="mutating || !editor.raw.trim()"
+            @click="saveEditor"
+          >
+            <span
+              v-if="mutating"
+              class="loading loading-spinner loading-xs"
+            />
+            {{ $t('save') }}
+          </button>
+        </div>
+      </div>
+
+      <div
+        v-if="operationError"
+        class="alert alert-error py-2 text-xs"
+      >
+        <ExclamationTriangleIcon class="h-4 w-4 shrink-0" />
+        <span class="min-w-0 break-words">{{ operationError }}</span>
+      </div>
     </div>
 
     <div class="relative min-h-0 flex-1 overflow-auto">
@@ -118,6 +203,12 @@
                 />
               </button>
             </th>
+            <th
+              v-if="editable"
+              class="w-24 text-right"
+            >
+              {{ $t('actions') }}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -163,6 +254,31 @@
                   <ClipboardDocumentIcon class="h-3.5 w-3.5" />
                 </button>
               </div>
+            </td>
+            <td
+              v-if="editable"
+              class="w-24 text-right whitespace-nowrap"
+            >
+              <button
+                type="button"
+                class="btn btn-circle btn-ghost btn-xs"
+                :aria-label="$t('editLocalProviderRule')"
+                :title="$t('editLocalProviderRule')"
+                :disabled="mutating"
+                @click="beginEdit(item)"
+              >
+                <PencilSquareIcon class="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                class="btn btn-circle btn-ghost btn-xs text-error"
+                :aria-label="$t('delete')"
+                :title="$t('delete')"
+                :disabled="mutating"
+                @click="removeRule(item)"
+              >
+                <TrashIcon class="h-3.5 w-3.5" />
+              </button>
             </td>
           </tr>
         </tbody>
@@ -216,16 +332,25 @@ import SegmentedControl from '@/components/common/SegmentedControl.vue'
 import {
   fetchLocalRuleProviderRulePage,
   LocalHelperRequestError,
+  mutateLocalRuleProvider,
+  rollbackLocalRuleProvider,
   type LocalProviderRulePageResponse,
+  type LocalProviderRuleItem,
   type RuleProviderFamily,
   type RuleProviderSortDirection,
   type RuleProviderSortKey,
 } from '@/features/rule-intelligence/helperApi'
 import {
+  applyLocalProviderUpdate,
+  LocalProviderApplyError,
+} from '@/features/rule-intelligence/localProviderRules'
+import { clearLocalProviderRuleCache } from '@/features/rule-intelligence/providerCache'
+import {
   nextRuleProviderSort,
   RULE_PROVIDER_EXPLORER_PAGE_SIZE,
 } from '@/features/rule-intelligence/ruleProviderExplorer'
 import { showNotification } from '@/helper/notification'
+import { fetchRules, updateRuleProviderAPI } from '@/assembly/rules'
 import type { RuleProvider } from '@/types'
 import {
   ArrowDownCircleIcon,
@@ -237,6 +362,10 @@ import {
   ClipboardDocumentIcon,
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
+  PencilSquareIcon,
+  PlusIcon,
+  TrashIcon,
+  XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import { watchDebounced } from '@vueuse/core'
 import dayjs from 'dayjs'
@@ -255,7 +384,14 @@ const sortDirection = ref<RuleProviderSortDirection>('default')
 const requestedPage = ref(1)
 const pageResult = ref<LocalProviderRulePageResponse | null>(null)
 const loading = ref(false)
+const mutating = ref(false)
 const error = ref<LocalHelperRequestError | null>(null)
+const operationError = ref('')
+const editor = ref<{
+  operation: 'add' | 'update'
+  index?: number
+  raw: string
+} | null>(null)
 
 let activeRequest: AbortController | null = null
 let requestSequence = 0
@@ -272,6 +408,9 @@ const sortableColumns: Array<{
 ]
 
 const providerInfo = computed(() => pageResult.value?.provider)
+const editable = computed(
+  () => providerInfo.value?.editable === true && typeof pageResult.value?.version === 'string',
+)
 const dialogTitle = computed(() => {
   if (!props.provider) return ''
   const total = pageResult.value?.total ?? props.provider.ruleCount
@@ -400,12 +539,109 @@ const copyRaw = async (raw: string) => {
   showNotification({ content: 'copySuccess', type: 'alert-success', timeout: 2000 })
 }
 
+const beginAdd = () => {
+  operationError.value = ''
+  editor.value = { operation: 'add', raw: '' }
+}
+
+const beginEdit = (item: LocalProviderRuleItem) => {
+  operationError.value = ''
+  editor.value = { operation: 'update', index: item.index, raw: item.raw }
+}
+
+const cancelEdit = () => {
+  editor.value = null
+}
+
+const displayMutationError = (caught: unknown) => {
+  if (caught instanceof LocalProviderApplyError) {
+    const key = {
+      'reload-no-backup': 'localProviderReloadNoBackup',
+      rollback: 'localProviderRollbackFailed',
+      'rollback-reload': 'localProviderRollbackReloadFailed',
+      'reload-restored': 'localProviderReloadRestored',
+    }[caught.stage]
+    return t(key)
+  }
+  if (caught instanceof LocalHelperRequestError) {
+    if (caught.code === 'RULE_PROVIDER_VERSION_CONFLICT') {
+      return t('localProviderVersionConflict')
+    }
+    if (caught.code === 'RULE_PROVIDER_READ_ONLY') return t('providerReadOnly')
+    return `${t('localProviderOperationFailed')} (${caught.code})`
+  }
+  return t('localProviderOperationFailed')
+}
+
+const refreshAfterMutation = async () => {
+  clearLocalProviderRuleCache()
+  await fetchRules()
+}
+
+const runMutation = async (input: {
+  operation: 'add' | 'update' | 'delete'
+  index?: number
+  raw?: string
+}) => {
+  const name = props.provider?.name
+  const version = pageResult.value?.version
+  if (!name || !editable.value || typeof version !== 'string') return
+
+  mutating.value = true
+  operationError.value = ''
+  try {
+    await applyLocalProviderUpdate(
+      name,
+      () => mutateLocalRuleProvider(name, { expectedVersion: version, ...input }),
+      {
+        reload: updateRuleProviderAPI,
+        rollback: rollbackLocalRuleProvider,
+        refresh: refreshAfterMutation,
+      },
+    )
+    editor.value = null
+    showNotification({
+      content:
+        input.operation === 'add'
+          ? 'localProviderRuleAdded'
+          : input.operation === 'update'
+            ? 'localProviderRuleUpdated'
+            : 'localProviderRuleDeleted',
+      type: 'alert-success',
+      timeout: 2500,
+    })
+    await loadPage()
+  } catch (caught) {
+    operationError.value = displayMutationError(caught)
+    await loadPage()
+  } finally {
+    mutating.value = false
+  }
+}
+
+const saveEditor = () => {
+  const current = editor.value
+  if (!current || !current.raw.trim() || mutating.value) return
+  void runMutation({
+    operation: current.operation,
+    ...(current.index === undefined ? {} : { index: current.index }),
+    raw: current.raw,
+  })
+}
+
+const removeRule = (item: LocalProviderRuleItem) => {
+  if (mutating.value || !confirm(t('deleteLocalProviderRuleConfirm'))) return
+  void runMutation({ operation: 'delete', index: item.index })
+}
+
 watch([isOpen, () => props.provider?.name], ([open, name], [wasOpen, previousName]) => {
   if (!open) {
     requestSequence += 1
     activeRequest?.abort()
     activeRequest = null
     loading.value = false
+    editor.value = null
+    operationError.value = ''
     return
   }
   if (name && (!wasOpen || name !== previousName)) {

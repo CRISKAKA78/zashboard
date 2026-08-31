@@ -19,8 +19,9 @@ const entry = (index, type = 'DOMAIN') => ({
 })
 
 const result = (entries) => ({
-  provider: { name: 'Test', behavior: 'classical', format: 'text' },
+  provider: { name: 'Test', behavior: 'classical', format: 'text', editable: true },
   entries,
+  version: 'provider-version',
   cache: 'hit',
 })
 
@@ -77,6 +78,8 @@ describe('Rule Provider Explorer projection', () => {
       pages.map((page) => page.hasMore),
       [true, true, false],
     )
+    assert.equal(pages[0].provider.editable, true)
+    assert.equal(pages[0].version, 'provider-version')
   })
 
   it('filters content fields, reports global family counts, and sorts stably', () => {

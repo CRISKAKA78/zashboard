@@ -45,6 +45,8 @@ describe('Text/YAML Rule Provider parsing', () => {
 
     const result = await getRuleProviderRules(fixture.settings, 'Test')
 
+    assert.equal(result.provider.editable, true)
+    assert.equal(typeof result.version, 'string')
     assert.equal(result.entries[0].type, 'DOMAIN-SUFFIX')
     assert.equal(result.entries[0].value, 'google.com')
     assert.equal(result.entries[0].line, 2)
@@ -142,6 +144,8 @@ describe('Text/YAML Rule Provider parsing', () => {
       },
     })
 
+    assert.equal(result.provider.editable, false)
+    assert.equal(result.version, null)
     assert.deepEqual(
       result.entries.map(({ source, type, value, raw, behavior, format, line }) => ({
         source,

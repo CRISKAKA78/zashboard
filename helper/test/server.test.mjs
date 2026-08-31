@@ -76,6 +76,8 @@ it('serves the scoped Helper API without exposing a generic file route', async (
   assert.equal(providerRules.entries.length, 1)
   assert.equal(providerRules.entries[0].type, 'DOMAIN-SUFFIX')
   assert.equal(providerRules.entries[0].value, 'chatgpt.com')
+  assert.equal(providerRules.provider.editable, false)
+  assert.equal(providerRules.version, null)
 
   const providerPage = await fetch(
     `${baseUrl}/api/local/rule-provider/OpenAI/rules?page=1&pageSize=100&family=domain&search=chatgpt&sortKey=content&sortDirection=asc`,
@@ -85,6 +87,8 @@ it('serves the scoped Helper API without exposing a generic file route', async (
   assert.equal(providerPage.items.length, 1)
   assert.equal(providerPage.items[0].value, 'chatgpt.com')
   assert.deepEqual(providerPage.counts, { all: 1, domain: 1, ip: 0, other: 0 })
+  assert.equal(providerPage.provider.editable, false)
+  assert.equal(providerPage.version, null)
 
   const invalidQuery = await fetch(`${baseUrl}/api/local/rule-provider/OpenAI/rules?pageSize=1000`)
   assert.equal(invalidQuery.status, 400)
@@ -159,6 +163,53 @@ it('requires JSON for custom-rules writes', async (t) => {
 
   assert.equal(response.status, 415)
   assert.equal(body.error.code, 'CONTENT_TYPE_REQUIRED')
+})
+
+it('routes local Rule Provider mutations by configured name only', async (t) => {
+  const calls = []
+  const response = {
+    provider: { name: 'OpenAI', editable: true },
+    entries: [],
+    version: 'saved-version',
+    backupId: 'backup-1',
+  }
+  const baseUrl = await startFixtureServer(t, {
+    localProviderRulesApi: {
+      save: async (_settings, name, body) => {
+        calls.push({ action: 'save', name, body })
+        return response
+      },
+      rollback: async (_settings, name, body) => {
+        calls.push({ action: 'rollback', name, body })
+        return { ...response, backupId: undefined }
+      },
+    },
+  })
+
+  const mutation = { expectedVersion: 'old-version', operation: 'add', raw: 'DOMAIN,example.com' }
+  const saved = await fetch(`${baseUrl}/api/local/rule-provider/OpenAI/rules`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(mutation),
+  })
+  assert.equal(saved.status, 200)
+  assert.deepEqual(calls.at(-1), { action: 'save', name: 'OpenAI', body: mutation })
+
+  const restore = { expectedVersion: 'saved-version', backupId: 'backup-1' }
+  const rolledBack = await fetch(`${baseUrl}/api/local/rule-provider/OpenAI/rules/rollback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(restore),
+  })
+  assert.equal(rolledBack.status, 200)
+  assert.deepEqual(calls.at(-1), { action: 'rollback', name: 'OpenAI', body: restore })
+
+  const genericWrite = await fetch(`${baseUrl}/api/local/rule-provider`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...mutation, path: '/etc/passwd' }),
+  })
+  assert.equal(genericWrite.status, 404)
 })
 
 it('rejects an unconfigured cross-origin request', async (t) => {

@@ -10,7 +10,7 @@ import {
 describe('dashboard version metadata', () => {
   it('normalizes custom and official version values for display', () => {
     assert.equal(normalizeDashboardVersion('3.24.0'), 'v3.24.0')
-    assert.equal(normalizeDashboardVersion('v1.2.0'), 'v1.2.0')
+    assert.equal(normalizeDashboardVersion('v1.3.0'), 'v1.3.0')
     assert.equal(normalizeDashboardVersion('  v3.24.0  '), 'v3.24.0')
     assert.equal(normalizeDashboardVersion(''), '')
     assert.equal(normalizeDashboardVersion(null), '')

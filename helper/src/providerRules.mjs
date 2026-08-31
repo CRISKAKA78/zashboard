@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { constants } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { extname } from 'node:path'
@@ -91,7 +92,7 @@ const normalizeEntry = (value, context) => {
   }
 }
 
-const parseTextProvider = (source, provider, options = {}) =>
+export const parseTextProvider = (source, provider, options = {}) =>
   source
     .split(/\r?\n/u)
     .map((value, index) =>
@@ -104,7 +105,7 @@ const parseTextProvider = (source, provider, options = {}) =>
     )
     .filter(Boolean)
 
-const parseYamlProvider = (source, provider) => {
+export const parseYamlProvider = (source, provider) => {
   const lineCounter = new LineCounter()
   const document = parseDocument(source, {
     lineCounter,
@@ -150,7 +151,7 @@ const parseYamlProvider = (source, provider) => {
     .filter(Boolean)
 }
 
-const resolveProviderFormat = (provider) => {
+export const resolveProviderFormat = (provider) => {
   const configuredFormat = provider.format?.toLowerCase()
   const extension = extname(provider.path || '').toLowerCase()
 
@@ -172,7 +173,7 @@ const resolveProviderFormat = (provider) => {
   )
 }
 
-const readProviderSource = async (provider, maxBytes) => {
+export const readProviderSource = async (provider, maxBytes) => {
   let handle
 
   try {
@@ -203,6 +204,39 @@ const readProviderSource = async (provider, maxBytes) => {
   }
 }
 
+export const isEditableRuleProvider = (provider, format = resolveProviderFormat(provider)) =>
+  String(provider.type || '')
+    .trim()
+    .toLowerCase() === 'file' &&
+  provider.pathAccess === 'allowed' &&
+  provider.exists === true &&
+  typeof provider.configuredPath === 'string' &&
+  ['text', 'yaml'].includes(format)
+
+export const getRuleProviderVersion = (provider, source) =>
+  createHash('sha256')
+    .update(provider.name)
+    .update('\0')
+    .update(provider.path || '')
+    .update('\0')
+    .update(provider.behavior || '')
+    .update('\0')
+    .update(provider.format || '')
+    .update('\0')
+    .update(source)
+    .digest('hex')
+
+export const parseRuleProviderSource = (source, provider) => {
+  const format = provider.format || resolveProviderFormat(provider)
+  if (format === 'text') return parseTextProvider(source, provider)
+  if (format === 'yaml') return parseYamlProvider(source, provider)
+  throw new LocalHelperError(
+    'RULE_PROVIDER_FORMAT_READ_ONLY',
+    `Rule Provider "${provider.name}" format "${format}" cannot be edited.`,
+    409,
+  )
+}
+
 const responseFromParsed = (provider, parsed, cache) => ({
   provider: {
     ...provider,
@@ -210,6 +244,7 @@ const responseFromParsed = (provider, parsed, cache) => ({
     mtime: parsed.stat.mtime.toISOString(),
   },
   entries: parsed.entries,
+  version: null,
   cache,
 })
 
@@ -243,7 +278,11 @@ export const getRuleProviderRules = async (settings, name, dependencies = {}) =>
   }
 
   const format = resolveProviderFormat(provider)
-  const normalizedProvider = { ...provider, format }
+  const normalizedProvider = {
+    ...provider,
+    format,
+    editable: isEditableRuleProvider(provider, format),
+  }
   const cacheKey = JSON.stringify([
     provider.name,
     provider.path,
@@ -255,7 +294,12 @@ export const getRuleProviderRules = async (settings, name, dependencies = {}) =>
   const cached = parsedProviderCache.get(provider.name)
 
   if (cached?.key === cacheKey) {
-    return { provider: normalizedProvider, entries: cached.entries, cache: 'hit' }
+    return {
+      provider: normalizedProvider,
+      entries: cached.entries,
+      version: cached.version ?? null,
+      cache: 'hit',
+    }
   }
 
   if (format === 'mrs') {
@@ -284,12 +328,12 @@ export const getRuleProviderRules = async (settings, name, dependencies = {}) =>
   }
 
   const { source, stat } = await readProviderSource(provider, settings.maxProviderBytes)
-  const entries =
-    format === 'text'
-      ? parseTextProvider(source, normalizedProvider)
-      : parseYamlProvider(source, normalizedProvider)
+  const entries = parseRuleProviderSource(source, normalizedProvider)
+  const version = normalizedProvider.editable
+    ? getRuleProviderVersion(normalizedProvider, source)
+    : null
 
-  parsedProviderCache.set(provider.name, { key: cacheKey, entries })
+  parsedProviderCache.set(provider.name, { key: cacheKey, entries, version })
 
   return {
     provider: {
@@ -298,6 +342,7 @@ export const getRuleProviderRules = async (settings, name, dependencies = {}) =>
       mtime: stat.mtime.toISOString(),
     },
     entries,
+    version,
     cache: 'miss',
   }
 }

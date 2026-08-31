@@ -270,11 +270,15 @@ write_environment() {
 }
 
 render_service() {
-  local template content temp
+  local template content temp rules_dir custom_rules_dir
   template=$(<"$SOURCE_DIR/deploy/zashboard-helper.service")
   content=${template//@ENV_FILE@/$ENV_FILE}
   content=${content//@INSTALL_DIR@/$INSTALL_DIR}
   content=${content//@NODE_BIN@/$NODE_BIN}
+  rules_dir=$(systemd_quote "$MIHOMO_RULES_DIR")
+  custom_rules_dir=$(systemd_quote "$MIHOMO_CUSTOM_RULES_DIR")
+  content=${content//@RULES_DIR@/$rules_dir}
+  content=${content//@CUSTOM_RULES_DIR@/$custom_rules_dir}
   temp=$SERVICE_TARGET.tmp.$$
   mkdir -p -- "$(dirname -- "$SERVICE_TARGET")"
   printf '%s\n' "$content" >"$temp"

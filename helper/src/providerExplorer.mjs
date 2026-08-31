@@ -176,6 +176,7 @@ export const createRuleProviderPage = (providerResult, query = {}) => {
 
   return {
     provider: providerResult.provider,
+    version: providerResult.version ?? null,
     total: providerResult.entries.length,
     matched,
     page,

@@ -11,6 +11,7 @@ import {
 } from './customRules.mjs'
 import { loadHelperSettings } from './environment.mjs'
 import { LocalHelperError, toPublicError } from './errors.mjs'
+import { rollbackLocalRuleProvider, saveLocalRuleProvider } from './localProviderRules.mjs'
 import { createRuleProviderPage, hasRuleProviderExplorerQuery } from './providerExplorer.mjs'
 import { getRuleProviderRules } from './providerRules.mjs'
 
@@ -88,7 +89,7 @@ const readJsonBody = async (request, settings) => {
   ) {
     throw new LocalHelperError(
       'CONTENT_TYPE_REQUIRED',
-      'Custom rules requests must use application/json.',
+      'Local Helper write requests must use application/json.',
       415,
     )
   }
@@ -131,6 +132,10 @@ const routeRequest = async (request, settings, dependencies) => {
     save: saveCustomRules,
     rollback: rollbackCustomRules,
     restore: restoreCustomRulesBackup,
+  }
+  const localProviderRulesApi = dependencies.localProviderRulesApi || {
+    save: saveLocalRuleProvider,
+    rollback: rollbackLocalRuleProvider,
   }
 
   if (url.pathname === `${API_PREFIX}/health`) {
@@ -189,15 +194,38 @@ const routeRequest = async (request, settings, dependencies) => {
     }
   }
 
-  const providerRulesName = decodeProviderName(url.pathname, 'rules')
-  if (providerRulesName !== null) {
-    requireMethod(request, 'GET')
-    const providerRules = await getRuleProviderRules(settings, providerRulesName)
+  const providerRollbackName = decodeProviderName(url.pathname, 'rules/rollback')
+  if (providerRollbackName !== null) {
+    requireMethod(request, 'POST')
     return {
       status: 200,
-      body: hasRuleProviderExplorerQuery(url.searchParams)
-        ? createRuleProviderPage(providerRules, url.searchParams)
-        : providerRules,
+      body: await localProviderRulesApi.rollback(
+        settings,
+        providerRollbackName,
+        await readJsonBody(request, settings),
+      ),
+    }
+  }
+
+  const providerRulesName = decodeProviderName(url.pathname, 'rules')
+  if (providerRulesName !== null) {
+    if (request.method === 'GET') {
+      const providerRules = await getRuleProviderRules(settings, providerRulesName)
+      return {
+        status: 200,
+        body: hasRuleProviderExplorerQuery(url.searchParams)
+          ? createRuleProviderPage(providerRules, url.searchParams)
+          : providerRules,
+      }
+    }
+    requireMethod(request, 'PUT')
+    return {
+      status: 200,
+      body: await localProviderRulesApi.save(
+        settings,
+        providerRulesName,
+        await readJsonBody(request, settings),
+      ),
     }
   }
 

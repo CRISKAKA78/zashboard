@@ -78,6 +78,11 @@ assert_file "$STAGE/etc/zashboard-helper/zashboard-helper.env"
 assert_file "$STAGE/etc/zashboard-helper/.zashboard-managed"
 assert_file "$STAGE/etc/systemd/system/zashboard-helper.service"
 assert_file "$STAGE/srv/zashboard/index.html"
+grep -Fxq 'ProtectSystem=strict' "$STAGE/etc/systemd/system/zashboard-helper.service" ||
+  fail "Helper service does not protect the system filesystem"
+grep -Fxq "ReadWritePaths=\"$FIXTURE/providers\" \"$FIXTURE/custom\"" \
+  "$STAGE/etc/systemd/system/zashboard-helper.service" ||
+  fail "Helper service does not limit writes to the configured rules roots"
 
 set -a
 # shellcheck disable=SC1091

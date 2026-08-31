@@ -29,6 +29,7 @@ export type LocalRuleProviderInfo = {
   mtime: string | null
   url: string | null
   interval: number | null
+  editable?: boolean
   error: LocalHelperErrorInfo | null
 }
 
@@ -172,6 +173,7 @@ export const fetchLocalRuleProviderInfo = (name: string, signal?: AbortSignal) =
 export type LocalProviderRulesResponse = {
   provider: LocalRuleProviderInfo
   entries: RuleEntry[]
+  version: string | null
   cache: 'hit' | 'miss'
 }
 
@@ -187,6 +189,7 @@ export type LocalProviderRuleItem = RuleEntry & {
 
 export type LocalProviderRulePageResponse = {
   provider: LocalRuleProviderInfo
+  version: string | null
   total: number
   matched: number
   page: number
@@ -195,6 +198,25 @@ export type LocalProviderRulePageResponse = {
   counts: Record<RuleProviderFamily, number>
   items: LocalProviderRuleItem[]
   cache: 'hit' | 'miss'
+}
+
+export type LocalProviderRuleMutationInput = {
+  expectedVersion: string
+  operation: 'add' | 'update' | 'delete'
+  index?: number
+  raw?: string
+}
+
+export type LocalProviderRuleRestoreInput = {
+  expectedVersion: string
+  backupId: string
+}
+
+export type LocalProviderRuleMutationResponse = {
+  provider: LocalRuleProviderInfo
+  entries: RuleEntry[]
+  version: string
+  backupId?: string
 }
 
 export type LocalProviderRulePageQuery = {
@@ -232,6 +254,36 @@ export const fetchLocalRuleProviderRulePage = (
     { signal, timeout: PROVIDER_RULES_TIMEOUT },
   )
 }
+
+export const mutateLocalRuleProvider = (
+  name: string,
+  input: LocalProviderRuleMutationInput,
+  signal?: AbortSignal,
+) =>
+  requestLocalHelper<LocalProviderRuleMutationResponse>(
+    `/api/local/rule-provider/${encodeURIComponent(name)}/rules`,
+    {
+      method: 'PUT',
+      body: input,
+      signal,
+      timeout: PROVIDER_RULES_TIMEOUT,
+    },
+  )
+
+export const rollbackLocalRuleProvider = (
+  name: string,
+  input: LocalProviderRuleRestoreInput,
+  signal?: AbortSignal,
+) =>
+  requestLocalHelper<LocalProviderRuleMutationResponse>(
+    `/api/local/rule-provider/${encodeURIComponent(name)}/rules/rollback`,
+    {
+      method: 'POST',
+      body: input,
+      signal,
+      timeout: PROVIDER_RULES_TIMEOUT,
+    },
+  )
 
 export const fetchLocalCustomRules = (signal?: AbortSignal) =>
   requestLocalHelper<CustomRulesState>('/api/local/custom-rules', { signal })
