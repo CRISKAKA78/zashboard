@@ -115,7 +115,7 @@ Rules 页的 Provider 卡片和表格行共用一个 `RuleProviderExplorerDialog
 
 Rule Search 对 `DOMAIN`、`DOMAIN-SUFFIX`、`DOMAIN-KEYWORD`、`DOMAIN-WILDCARD`、`DOMAIN-REGEX`、`IP-CIDR`、`IP-CIDR6` 和 `IP-SUFFIX` 做流量语义匹配，并统一 Controller CamelCase 与配置/Provider 大写连字符类型名；关键词模式仅是内容搜索，不声称是实际流量命中。
 
-Rule Penetration 严格遵守顺序。如果更早的 `RULE-SET` 不可用，或遇到仅凭目标域名/IP 无法判断的 `GEOSITE`、`GEOIP`、`IP-ASN`、来源、端口、进程、入站或逻辑规则，结果是“无法确定”，不会把后方规则误报为有效命中。Provider 中只要存在可证明的匹配仍可确定命中；仅在没有已知匹配且存在不可判定条目时阻断。策略链解析共用 `proxyChain.ts`，支持缺失节点和循环检测。
+Rule Penetration 严格遵守顺序。Helper 会投影源配置中 `RULE-SET` 的目标与 `no-resolve` 元数据，因此仅输入域名时可以安全跳过明确禁止 DNS 解析的 IP Provider。如果更早的 `RULE-SET` 不可用，或遇到仍可能需要 DNS 的目标 IP 规则，以及仅凭目标域名/IP 无法判断的 `GEOSITE`、`GEOIP`、`IP-ASN`、来源、端口、进程、入站或逻辑规则，结果是“无法确定”，不会把后方规则误报为有效命中。Provider 中只要存在可证明的匹配仍可确定命中；仅在没有已知匹配且存在不可判定条目时阻断。策略链解析共用 `proxyChain.ts`，支持缺失节点和循环检测。
 
 ## Custom Rules
 

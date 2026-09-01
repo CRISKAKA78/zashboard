@@ -4,7 +4,7 @@
 部署的增强版本。
 
 ```text
-Project version: v1.3.0
+Project version: v1.3.1
 Based on Zephyruso/zashboard v3.24.0 (f6dd9c07)
 ```
 
@@ -44,7 +44,7 @@ flowchart LR
 - 代理链/策略穿透：解析代理组到最终节点，并报告循环或缺失节点。
 - Fallback 检测：识别第一个启用的 `MATCH` 或 `FINAL` 规则。
 - Domain（含 Wildcard/Regex）、IP/CIDR/IP-Suffix 和关键字规则搜索，覆盖直接规则及可读取的 Rule Provider。
-- 有效规则穿透：按真实顺序解释最早可确定的规则、目标策略、代理链和最终出站。
+- 有效规则穿透：按真实顺序解释最早可确定的规则、目标策略、代理链和最终出站，并识别外层 `RULE-SET` 的 `no-resolve` 语义。
 - Text、YAML 及 `domain`/`ipcidr` MRS Provider 的统一解析与缓存。
 - Rule Provider Explorer：类型计数、搜索、稳定排序、原文复制和 Helper 端分页；本地 `type: file` 的 Text/YAML Provider 支持增删改，HTTP/MRS 等 Provider 保持只读。
 - 设置页同时显示本项目自定义版本与 zashboard 官方最新版；版本检查完全只读，面板不提供在线升级入口，也不会请求内核替换 UI。
@@ -234,7 +234,7 @@ Helper EnvironmentFile、自定义规则和 Web Server 配置，然后在普通�
 
 ```bash
 git fetch --tags origin
-git switch --detach v1.3.0
+git switch --detach v1.3.1
 pnpm install --frozen-lockfile
 pnpm build:no-fonts
 sudo bash deploy/install.sh \
@@ -245,7 +245,7 @@ sudo bash deploy/install.sh \
   --custom-rules-dir /etc/mihomo/custom
 ```
 
-将 `v1.3.0` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
+将 `v1.3.1` 替换为准备安装的发布标签。若你明确选择跟踪 `main`，可使用
 `git switch main && git pull --ff-only origin main`，但 `main` 可能包含尚未打标签的后续提交。
 
 安装器先准备新的 commit 目录，再切换 `current` 符号链接；原 UI 会进入备份。systemd 启动或健康

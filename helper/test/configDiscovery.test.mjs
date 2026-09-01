@@ -112,6 +112,25 @@ describe('Local Helper configuration discovery', () => {
     assert.match(provider.mtime, /^\d{4}-\d{2}-\d{2}T/)
   })
 
+  it('reports RULE-SET targets and no-resolve modifiers', async (t) => {
+    const fixture = await createFixture(t)
+    await writeFile(
+      fixture.configPath,
+      `${providerConfig('./rules/openai.mrs')}
+rules:
+  - RULE-SET,OpenAI,AI,no-resolve
+  - RuleSet,OpenAI,Fallback
+`,
+    )
+
+    const [provider] = await listRuleProviders(fixture.settings)
+
+    assert.deepEqual(provider.ruleReferences, [
+      { target: 'AI', noResolve: true },
+      { target: 'Fallback', noResolve: false },
+    ])
+  })
+
   it('accepts an absolute provider path inside MIHOMO_RULES_DIR', async (t) => {
     const fixture = await createFixture(t)
     const rulePath = join(fixture.rulesDir, 'absolute.yaml')

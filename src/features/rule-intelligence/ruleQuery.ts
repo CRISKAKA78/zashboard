@@ -104,6 +104,7 @@ const evaluateDomainRule = (
 export const evaluateRuleEntryTraffic = (
   entry: RuleEntry,
   query: RuleQuery,
+  options: { noResolve?: boolean } = {},
 ): RuleTrafficEvaluation => {
   const type = normalizeRuleType(entry.type)
 
@@ -112,7 +113,9 @@ export const evaluateRuleEntryTraffic = (
   }
 
   if (DESTINATION_IP_RULE_TYPES.has(type)) {
-    if (query.kind === 'domain') return hasNoResolve(entry) ? 'miss' : 'indeterminate'
+    if (query.kind === 'domain') {
+      return options.noResolve || hasNoResolve(entry) ? 'miss' : 'indeterminate'
+    }
     if (type === 'IP-CIDR' || type === 'IP-CIDR6') {
       return isIpInCidr(query.normalized, entry.value.trim()) ? 'match' : 'miss'
     }

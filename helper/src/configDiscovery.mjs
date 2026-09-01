@@ -13,6 +13,32 @@ const errorInfo = (error) => ({
   message: error.message,
 })
 
+const getRuleProviderReferences = (config) => {
+  const references = new Map()
+  if (!Array.isArray(config.rules)) return references
+
+  for (const rawRule of config.rules) {
+    if (typeof rawRule !== 'string') continue
+
+    const fields = rawRule.split(',').map((field) => field.trim())
+    const type = String(fields[0] || '')
+      .replace(/[\s_-]+/gu, '')
+      .toUpperCase()
+    const providerName = fields[1]
+    const target = fields[2]
+    if (type !== 'RULESET' || !providerName || !target) continue
+
+    const providerReferences = references.get(providerName) || []
+    providerReferences.push({
+      target,
+      noResolve: fields.slice(3).some((field) => field.toLowerCase() === 'no-resolve'),
+    })
+    references.set(providerName, providerReferences)
+  }
+
+  return references
+}
+
 const readConfigSource = async (configPath) => {
   try {
     return await readFile(configPath, 'utf8')
@@ -89,6 +115,8 @@ export const getRuleProviderDefinitions = (config) => {
     )
   }
 
+  const references = getRuleProviderReferences(config)
+
   return Object.entries(providers).map(([name, provider]) => {
     if (!isRecord(provider)) {
       throw new LocalHelperError(
@@ -111,6 +139,7 @@ export const getRuleProviderDefinitions = (config) => {
       configuredPath: typeof provider.path === 'string' ? provider.path : null,
       url: typeof provider.url === 'string' ? provider.url : null,
       interval: Number.isFinite(intervalValue) ? intervalValue : null,
+      ruleReferences: references.get(name) || [],
     }
   })
 }

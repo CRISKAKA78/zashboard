@@ -16,6 +16,11 @@ export type LocalHelperErrorInfo = {
   message: string
 }
 
+export type LocalRuleProviderReference = {
+  target: string
+  noResolve: boolean
+}
+
 export type LocalRuleProviderInfo = {
   name: string
   type: string | null
@@ -29,6 +34,7 @@ export type LocalRuleProviderInfo = {
   mtime: string | null
   url: string | null
   interval: number | null
+  ruleReferences?: LocalRuleProviderReference[]
   editable?: boolean
   error: LocalHelperErrorInfo | null
 }

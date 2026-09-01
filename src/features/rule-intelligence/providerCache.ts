@@ -25,7 +25,14 @@ const providerCache = new Map<string, CachedProvider>()
 const MAX_CONCURRENT_READS = 4
 
 const metadataSignature = (provider: LocalRuleProviderInfo) =>
-  [provider.path, provider.size, provider.mtime, provider.behavior, provider.format].join('|')
+  [
+    provider.path,
+    provider.size,
+    provider.mtime,
+    provider.behavior,
+    provider.format,
+    JSON.stringify(provider.ruleReferences || []),
+  ].join('|')
 
 const loadOneProvider = async (
   provider: LocalRuleProviderInfo,
@@ -45,6 +52,7 @@ const loadOneProvider = async (
       behavior: response.provider.behavior,
       format: response.provider.format,
       entries: response.entries,
+      ruleReferences: response.provider.ruleReferences || provider.ruleReferences || [],
     }
     providerCache.set(provider.name, { signature, rules })
     return { rules }

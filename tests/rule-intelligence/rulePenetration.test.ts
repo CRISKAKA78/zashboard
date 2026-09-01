@@ -269,6 +269,54 @@ describe('resolveRulePenetration', () => {
     assert.equal(result.effectiveMatch?.entry?.type, 'DOMAIN')
   })
 
+  it('skips a no-resolve IP Provider and reaches a later domain Provider', () => {
+    const telegramIp = provider('Telegram / IP', [entry('IP-CIDR', '149.154.160.0/20')])
+    telegramIp.behavior = 'ipcidr'
+    telegramIp.ruleReferences = [{ target: 'Telegram', noResolve: true }]
+
+    const result = resolveRulePenetration(
+      'accounts.binance.com',
+      [
+        rule({
+          type: 'RULE-SET',
+          payload: 'Telegram / IP',
+          proxy: 'Telegram',
+          index: 18,
+        }),
+        rule({
+          type: 'RULE-SET',
+          payload: 'Binance / Domain',
+          proxy: 'Crypto',
+          index: 55,
+        }),
+      ],
+      [telegramIp, provider('Binance / Domain', [entry('DOMAIN-SUFFIX', 'binance.com')])],
+    )
+
+    assert.equal(result.status, 'resolved')
+    assert.equal(result.effectiveRuleIndex, 55)
+    assert.equal(result.effectiveMatch?.providerName, 'Binance / Domain')
+    assert.equal(result.target, 'Crypto')
+  })
+
+  it('keeps an IP Provider indeterminate when its RULE-SET may resolve DNS', () => {
+    const telegramIp = provider('Telegram / IP', [entry('IP-CIDR', '149.154.160.0/20')])
+    telegramIp.behavior = 'ipcidr'
+    telegramIp.ruleReferences = [{ target: 'Telegram', noResolve: false }]
+
+    const result = resolveRulePenetration(
+      'accounts.binance.com',
+      [
+        rule({ type: 'RULE-SET', payload: 'Telegram / IP', proxy: 'Telegram' }),
+        rule({ type: 'DOMAIN-SUFFIX', payload: 'binance.com', proxy: 'Crypto' }),
+      ],
+      [telegramIp],
+    )
+
+    assert.equal(result.status, 'indeterminate')
+    assert.equal(result.blocker?.ruleType, 'IP-CIDR')
+  })
+
   it('does not label keyword content search as an effective match', () => {
     const result = resolveRulePenetration('openai', [
       rule({ type: 'DOMAIN-SUFFIX', payload: 'openai.com', proxy: 'AI' }),

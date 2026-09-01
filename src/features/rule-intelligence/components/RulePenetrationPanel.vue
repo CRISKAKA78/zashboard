@@ -118,14 +118,15 @@
           <div class="min-w-0">
             <p class="font-medium">
               {{
-                penetration.blocker?.source === 'provider'
-                  ? $t('rulePenetrationIndeterminate', {
-                      provider: penetration.blocker.providerName,
-                      index: penetration.blocker.ruleIndex,
-                    })
-                  : $t('rulePenetrationContextIndeterminate', {
+                penetration.blocker?.code === 'RULE_CONTEXT_REQUIRED' ||
+                penetration.blocker?.source !== 'provider'
+                  ? $t('rulePenetrationContextIndeterminate', {
                       type: penetration.blocker?.ruleType,
                       index: penetration.blocker?.ruleIndex,
+                    })
+                  : $t('rulePenetrationIndeterminate', {
+                      provider: penetration.blocker.providerName,
+                      index: penetration.blocker.ruleIndex,
                     })
               }}
             </p>

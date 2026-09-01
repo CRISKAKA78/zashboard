@@ -51,6 +51,10 @@ export type ProviderRuleSet = {
   behavior: string | null
   format: string | null
   entries: RuleEntry[]
+  ruleReferences?: Array<{
+    target: string
+    noResolve: boolean
+  }>
 }
 
 export type RuleIntelligenceMatch = {

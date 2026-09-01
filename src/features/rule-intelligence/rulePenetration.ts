@@ -135,6 +135,14 @@ const directMatch = (rule: Rule, position: number): RuleIntelligenceMatch => ({
   target: rule.proxy,
 })
 
+const providerRuleHasNoResolve = (rule: Rule, provider: ProviderRuleSet) => {
+  const references = (provider.ruleReferences || []).filter(
+    (reference) => reference.target === rule.proxy,
+  )
+
+  return references.length > 0 && references.every((reference) => reference.noResolve)
+}
+
 const withoutEffectiveMatch = (
   matches: readonly RuleIntelligenceMatch[],
   effective: RuleIntelligenceMatch,
@@ -208,10 +216,11 @@ export const resolveRulePenetration = (
       }
 
       const provider = providersByName.get(rule.payload)!
+      const noResolve = providerRuleHasNoResolve(rule, provider)
       let entryMatch: ProviderRuleSet['entries'][number] | null = null
       let indeterminateEntry: ProviderRuleSet['entries'][number] | null = null
       for (const entry of provider.entries) {
-        const evaluation = evaluateRuleEntryTraffic(entry, search.query)
+        const evaluation = evaluateRuleEntryTraffic(entry, search.query, { noResolve })
         if (evaluation === 'match') {
           entryMatch = entry
           break
