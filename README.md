@@ -4,8 +4,8 @@
 部署的增强版本。
 
 ```text
-Project version: v1.3.1
-Based on Zephyruso/zashboard v3.24.0 (f6dd9c07)
+Project version: v1.4.0
+Based on Zephyruso/zashboard v3.26.0 (b31d05f4)
 ```
 
 项目版本与上游基线是两个独立概念。本项目保留上游的 Dashboard、Proxies、Connections、Logs、
@@ -305,7 +305,17 @@ curl http://127.0.0.1:8787/api/local/health
 - Mihomo 仍显示旧面板：确认实际 `external-ui` 路径，并按你的 Mihomo 服务流程重载。安装器不会
   自动修改或重启 Mihomo。
 
+## 官方面板功能更新
+
+当前基线包含官方代理组与节点虚拟滚动、折叠动画、展开时定位当前节点及返回页面时恢复滚动位置。
+设置页支持自定义 CSS；连接详情始终显示完整代理链。Rule Intelligence 继续复用官方状态与组件，
+Local Helper 的配置与部署方式不变。
+
 ## 开发与验证
+
+代理页行为与折叠动画还可在构建后运行 `pnpm test:verify` 和 `node test/collapse.mjs`；
+需要本机 Chrome/Chromium，可用 `CHROME_BIN` 指定路径。性能测试为 `pnpm test:bench`，
+测试使用隔离的模拟 Mihomo 后端，详见 [浏览器测试说明](test/README.md)。
 
 ```bash
 pnpm install --frozen-lockfile

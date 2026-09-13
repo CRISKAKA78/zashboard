@@ -3,6 +3,16 @@
 All notable changes to Zashboard Rule Intelligence are documented here. Project versions are
 independent from the incorporated Zephyruso/zashboard upstream version.
 
+## v1.4.0 — 2026-09-14
+
+- Update the Zephyruso/zashboard baseline to v3.26.0 (`b31d05f4`).
+- Adopt upstream proxy group/node virtualization, cached latency lookup, collapse animations, and
+  active-node/route scroll restoration.
+- Add upstream custom CSS settings and fixes for dialog scroll locking, connection metrics, virtual
+  tables, and complete proxy chains in connection details.
+- Retain Rule Intelligence, the minimal Local Helper, and read-only dashboard version checks.
+- Include the upstream mock-backend browser regression and performance scripts.
+
 ## v1.0.0
 
 - Initial public source release of Zashboard Rule Intelligence.

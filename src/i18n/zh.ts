@@ -179,6 +179,8 @@ const zh: LANG_MESSAGE = {
   ruleSettings: '规则设置',
   connectionDetails: '连接详情',
   customTheme: '自定义主题',
+  customCSS: '自定义 CSS',
+  customCSSTip: '以下样式会原样注入页面，无效的规则可能导致界面显示异常。',
   unavailableProxy: '隐藏不可用节点',
   protocolTips:
     '您正在尝试连接一个http后端但zashboard是通过https提供的，这可能会导致连接错误，请在浏览器设置中允许不安全的内容，或者使用http版本面板例如http://board.zash.run.place',
